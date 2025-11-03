@@ -1,0 +1,250 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.10, pytest-8.3.3, pluggy-1.5.0 -- /home/tom/.pyenv/versions/3.11.10/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'default' -> database=DirectoryBasedExampleDatabase(PosixPath('/home/tom/git/Neural-Computer-Interface/approach_2025/.hypothesis/examples'))
+Test order randomisation NOT enabled. Enable with --random-order or --random-order-bucket=<bucket_type>
+rootdir: /home/tom/git/Neural-Computer-Interface/approach_2025
+plugins: jaxtyping-0.3.2, mock-3.14.0, asyncio-0.24.0, testmon-2.1.3, anyio-4.10.0, postgresql-7.0.1, timeout-2.3.1, dash-3.0.4, repeat-0.9.3, xdist-3.6.1, cov-6.0.0, typeguard-4.4.3, base-url-2.1.0, flake8-1.3.0, playwright-0.5.1, hypothesis-6.121.2, random-order-1.1.1, pylint-0.21.0
+asyncio: mode=Mode.STRICT, default_loop_scope=None
+collecting ... collected 1 item
+
+tests/test_e2e_cli_dl_latest.py::TestE2ECLIDLLatest::test_train_cli_dl_and_infer Videos: 2  Classes: 2  Frames: 8  Train: 6  Val: 2  Test: 0
+Device: cpu
+                  HParams                  
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ key             ┃ value                 ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ model           │ mobilenetv3_small_100 │
+│ epochs          │ 1                     │
+│ batch_size      │ 2                     │
+│ lr              │ 0.0001                │
+│ weight_decay    │ 0.0001                │
+│ eval_split      │ 0.2                   │
+│ eval_mode       │ tail                  │
+│ optimizer       │ AdamW                 │
+│ label_smoothing │ 0.05                  │
+│ drop_path       │ 0.25                  │
+│ dropout         │ 0.0                   │
+│ aug             │ none                  │
+│ brightness      │ 0.0                   │
+│ warp            │ 0.0                   │
+│ sat             │ 0.08                  │
+│ contrast        │ 0.08                  │
+│ wb              │ 0.06                  │
+│ hue             │ 0.06                  │
+└─────────────────┴───────────────────────┘
+model_on_cuda=False pin_memory=False workers=4 prefetch=1 persistent=True 
+sharing=file_system
+Visdom: logging to env=vkb-aug port=8097
+Epoch 1/1 (batches: 3)
+  1/3 loss=0.954 acc=0.000 (2.1 fps) io=783.3ms gpu=143.6ms
+  2/3 loss=0.912 acc=0.000 (3.6 fps) io=1.6ms gpu=141.1ms
+  3/3 loss=0.853 acc=0.000 (4.9 fps) io=0.2ms gpu=107.8ms
+Validating...
+  Confusion  
+    (val)    
+┏━━━┳━━━┳━━━┓
+┃   ┃ A ┃ B ┃
+┡━━━╇━━━╇━━━┩
+│ A │ 1 │ 0 │
+│ B │ 0 │ 1 │
+└───┴───┴───┘
+confusion_raw=[[1, 0], [0, 1]]
+macro_f1=1.000
+epoch 1/1 train_acc=0.000 val_acc=1.000
+Perf: batches=3 bs=2 io_ms(avg/p90)=261.7/783.3 gpu_ms(avg/p90)=130.8/143.6 
+batch_ms(avg)=392.5 samples/s=5.1 stall=0.67
+Saved epoch 1 model: 
+/tmp/tmpzhuii6dt/models/20251101_103323_finetune_mobilenetv3_small_100_ep01.pkl
+Summary: epochs=1 avg_epoch=1.22s total=1.22s train_fps=4.9 samples/s
+                             Training Summary (DL)                              
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ classifier ┃ model           ┃ frames ┃ classes ┃ val_acc ┃ saved            ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ finetune   │ mobilenetv3_sm… │ 6      │ 2       │ 1.000   │ /tmp/tmpzhuii6d… │
+└────────────┴─────────────────┴────────┴─────────┴─────────┴──────────────────┘
+Saved model: 
+/tmp/tmpzhuii6dt/models/20251101_103323_finetune_mobilenetv3_small_100.pkl
+Saved model: 
+/tmp/tmpzhuii6dt/models/20251101_103323_finetune_mobilenetv3_small_100.pkl
+FAILED
+
+=================================== FAILURES ===================================
+________________ TestE2ECLIDLLatest.test_train_cli_dl_and_infer ________________
+
+self = <test_e2e_cli_dl_latest.TestE2ECLIDLLatest testMethod=test_train_cli_dl_and_infer>
+
+    def test_train_cli_dl_and_infer(self):
+        import train_frames as tf
+        import infer_live as inf
+    
+        tmp = tempfile.mkdtemp(); models_dir = os.path.join(tmp, "models"); os.makedirs(models_dir)
+    
+        # Fake videos and frames
+        vids = [("vid_A", "A"), ("vid_B", "B")]
+        orig_list_videos_tf = tf.list_videos
+        tf.list_videos = lambda _root: vids
+        import vkb.io as vio
+        orig_list_videos_vio = vio.list_videos
+        vio.list_videos = lambda _root: vids
+    
+        import numpy as np
+        class FakeCap:
+            def __init__(self, path):
+                val = 32 if path.endswith("A") else 224
+                self.frames = [np.full((16,16,3), val, dtype=np.uint8) for _ in range(4)]
+            def isOpened(self): return True
+            def read(self): return (True, self.frames.pop()) if self.frames else (False, None)
+            def release(self): pass
+        class FakeCv2:
+            VideoCapture = FakeCap
+            def resize(self, img, sz): return img
+            def cvtColor(self, img, code): return img
+            COLOR_BGR2RGB = 0
+        old_cv2 = sys.modules.get('cv2'); sys.modules['cv2'] = FakeCv2()
+    
+        # Tiny timm model stub
+        import types
+        class TinyNet:
+            def __init__(self, num_classes=2):
+                import torch, torch.nn as nn
+                self.net = nn.Sequential(nn.Flatten(), nn.Linear(16*16*3, num_classes))
+            def to(self, d): return self
+            def parameters(self): return self.net.parameters()
+            def load_state_dict(self, sd, strict=False):
+                return self
+            def state_dict(self): return self.net.state_dict()
+            def __call__(self, x): return self.net(x)
+            def train(self): return self
+            def eval(self): return self
+        fake_timm = types.SimpleNamespace(create_model=lambda name, pretrained=True, num_classes=2: TinyNet(num_classes))
+        old_timm = sys.modules.get('timm'); sys.modules['timm'] = fake_timm
+    
+        # Redirect model save to temp
+        orig_save = tf.save_model
+        from vkb.artifacts import save_model as real_save, latest_model
+        tf.save_model = lambda obj, name_parts, base_dir="models", ext=".pkl": real_save(obj, name_parts, base_dir=models_dir, ext=ext)
+        import vkb.artifacts as vart
+        orig_save_vart = vart.save_model
+        vart.save_model = lambda obj, name_parts, base_dir="models", ext=".pkl": orig_save_vart(obj, name_parts, base_dir=models_dir, ext=ext)
+    
+        # Train DL via CLI
+        old_argv = sys.argv
+        try:
+            sys.argv = [
+                "train_frames.py",
+                "--data", ".",
+                "--clf", "dl",
+                "--embed-model", "mobilenetv3_small_100",
+                "--epochs", "1",
+                "--batch-size", "2",
+                "--device", "cpu",
+                "--eval-split", "0.2",
+                "--allow-test-labels",
+                "--aug", "none",
+                "--warp", "0",
+                "--brightness", "0.0",
+            ]
+            tf.main()
+            p = latest_model(base_dir=models_dir)
+            assert os.path.exists(p)
+    
+            # Now run infer_live with DL path
+            class FakeCapInfer:
+                def __init__(self, *_):
+                    self.frames = [np.zeros((16,16,3), dtype=np.uint8) for _ in range(2)]
+                def isOpened(self): return True
+                def read(self): return (True, self.frames.pop()) if self.frames else (False, None)
+                def release(self): pass
+            class FakeCv2Infer:
+                VideoCapture = FakeCapInfer
+                def waitKey(self, *_): return ord('q')
+                def imshow(self, *_): pass
+                def destroyAllWindows(self): pass
+                def putText(self, *a, **k): pass
+                FONT_HERSHEY_SIMPLEX = 0
+                LINE_AA = 0
+                def cvtColor(self, img, code): return img
+                def resize(self, img, sz): return img
+                COLOR_BGR2RGB = 0
+            sys.modules['cv2'] = FakeCv2Infer()
+    
+            # stub timm for infer too
+            import infer_live as inf2
+            old_timm_inf = sys.modules.get('timm')
+            sys.modules['timm'] = fake_timm
+            buf = io.StringIO(); old_stdout = sys.stdout; sys.stdout = buf
+            try:
+                sys.argv = ["infer_live.py", "--frames", "2", "--device", "cpu"]
+>               inf2.main()
+
+tests/test_e2e_cli_dl_latest.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+infer_live.py:62: in main
+    bundle = load_bundle(path)
+infer_live.py:18: in load_bundle
+    return pickle.load(f)
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/storage.py:520: in _load_from_bytes
+    return torch.load(io.BytesIO(b), weights_only=False)
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:1384: in load
+    return _legacy_load(
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:1638: in _legacy_load
+    result = unpickler.load()
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:1566: in persistent_load
+    obj = restore_location(obj, location)
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:601: in default_restore_location
+    result = fn(storage, location)
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:539: in _deserialize
+    device = _validate_device(location, backend_name)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+location = 'cuda:0', backend_name = 'cuda'
+
+    def _validate_device(location, backend_name):
+        """
+        Check whether the device index of specified backend is valid
+    
+        In case of privateuse1 backend, your must first register a device_module for
+        privateuse1 using torch._register_device_module. Implement the following
+        methods in device_module like cuda: device_module._utils._get_device_index(location, True),
+        device_module.device_count().
+    
+        Args:
+            location: string of device
+            backend_name: the backend name or the name of privateuse1, which can be renamed
+    
+        Returns:
+            device_index: int
+        """
+        if not hasattr(torch, backend_name):
+            raise RuntimeError(
+                f"The {backend_name.upper()} device module is not registered. "
+                "If you are running on a CPU-only machine, "
+                "please use torch.load with map_location=torch.device('cpu') "
+                "to map your storages to the CPU."
+            )
+        device_module = getattr(torch, backend_name)
+        if hasattr(device_module, "_utils") and hasattr(
+            device_module._utils, "_get_device_index"
+        ):
+            device_index = device_module._utils._get_device_index(location, True)
+            device = torch.device(backend_name, device_index)
+        else:
+            device = torch.device(location)
+            device_index = device.index if device.index else 0
+        if hasattr(device_module, "is_available") and not device_module.is_available():
+>           raise RuntimeError(
+                f"Attempting to deserialize object on a {backend_name.upper()} "
+                f"device but torch.{backend_name}.is_available() is False. "
+                "If you are running on a CPU-only machine, "
+                "please use torch.load with map_location=torch.device('cpu') "
+                "to map your storages to the CPU."
+            )
+E           RuntimeError: Attempting to deserialize object on a CUDA device but torch.cuda.is_available() is False. If you are running on a CPU-only machine, please use torch.load with map_location=torch.device('cpu') to map your storages to the CPU.
+
+../../../.pyenv/versions/3.11.10/lib/python3.11/site-packages/torch/serialization.py:508: RuntimeError
+------------------------------ Captured log call -------------------------------
+WARNING  visdom:__init__.py:536 Setting up a new session...
+=========================== short test summary info ============================
+FAILED tests/test_e2e_cli_dl_latest.py::TestE2ECLIDLLatest::test_train_cli_dl_and_infer - RuntimeError: Attempting to deserialize object on a CUDA device but torch.cuda.is_available() is False. If you are running on a CPU-only machine, please use torch.load with map_location=torch.device('cpu') to map your storages to the CPU.
+============================== 1 failed in 8.55s ===============================
