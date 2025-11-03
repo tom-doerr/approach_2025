@@ -53,6 +53,17 @@ Scope: Applies to the entire `approach_2025` repo.
 - Doc mismatch to review: we state “shift uses roll‑around (circular) wrap”, but code uses
   reflect padding (`cv.BORDER_REFLECT_101`). Decide whether to keep reflect (current) or switch to true roll.
 
+### 2025-11-03 — Hangs followed by high CPU: Why and quick knobs
+- Most common cause: I/O wait during first-epoch cache builds and memmap reads (tasks in `D` state). UI feels frozen; when I/O finishes, many workers run at once → CPU spikes.
+- Thread oversubscription: OpenCV/BLAS/Torch spawn their own pools; with `workers>0` total runnable threads can exceed cores, amplifying the spike.
+- CPU-side augs (rotation/warp) are heavy; with `rot360` and `warp=0.30` they add real per-sample cost.
+- Quick actions (minimal):
+  - Diagnosis: add `--diag-system` to see `Sys:` and `Perf:` lines; high `io_ms` and many threads imply loader/IO bound.
+  - Stabilize: run 1 warm-up epoch with `--workers 0 --prefetch 1 --no-persistent-workers --visdom-aug 0` to build caches, then train with `--workers 1–2`.
+  - Cap threads: pass `--cap-threads` (sets OMP/MKL/OPENBLAS/NUMEXPR=1, cv2/torch threads=1).
+  - Reduce CPU aug: try `--rot-deg 5 --warp 0.10` (or keep defaults and enable `--dynamic-aug`).
+  - If load persists: lower `--img-size` and keep `--prefetch 1`.
+
 ## 2025-11-01 Updates
 - Fixed DL crash “mat1 and mat2 shapes cannot be multiplied (…150528 and 192…)”. Cause: local `timm` stub flattened raw 224×224 frames into 150,528 dims but used a `Linear(192→C)` head. Fix: stub now applies `AdaptiveAvgPool2d((8,8))` before `Flatten`, so input dim is always `8×8×3=192` regardless of image size. Added `tests/test_timm_stub_pooling.py` to assert outputs are shaped `[B, num_classes]` for sizes 224/64/17.
 - Reminder: if you use a real `timm` install, our stub is ignored. If you see this error again, ensure the intended `timm` is the one being imported.
@@ -288,6 +299,22 @@ Consider adopting (small, high‑leverage):
   `GIT_AUTHOR_NAME="…" GIT_AUTHOR_EMAIL="…" GIT_COMMITTER_NAME="…" GIT_COMMITTER_EMAIL="…" git commit -m "msg"`.
 - Alternatively, use `git commit --author="Name <email>"` while setting committer via env vars if needed.
 - Note: we removed a temporary local `[user]` section created during an earlier attempt so repo config is clean again.
+
+### 2025-11-03 — Repo State / Push
+- Tracked program files include: `train_frames.py`, `infer_live.py`, `record_video.py`, `optuna_finetune.py`, and the whole `vkb/` package.
+- Tests are tracked too; heavy dirs are ignored (`.venv/`, `.cache/`, `models/`, `data/`, `tmp/`).
+- Current branch: `main`. No remote configured (checked via `git remote -v`). To push:
+  - `git remote add origin <URL>`
+  - `GIT_TERMINAL_PROMPT=0 timeout 20s git push -u origin main`
+
+### 2025-11-03 — Symlink → Real Dir (outer repo)
+- Outer repo (`Neural-Computer-Interface`) had `approach_2025` as a symlink → `/mnt/4tb_nvme/approach_2025`.
+- To have the outer repo track files (not the symlink), we materialized a real directory:
+  - `rsync -a /mnt/4tb_nvme/approach_2025/ approach_2025_tmp/` excluding: `.git/ .venv/ .cache/ models/ data/ tmp/ __pycache__/ .pytest_cache/`.
+  - `rm approach_2025` (remove symlink) → `mv approach_2025_tmp approach_2025` (rename into place).
+  - `git add -A approach_2025 && git commit -m "vendor approach_2025 program files (replace symlink)"` in the OUTER repo branch `feat/approach_2025-aug-jitters-hue-20251101`.
+  - Pushed to the existing remote; branch updated.
+- Result: outer repo now contains real tracked files under `approach_2025/`.
 
 ### 2025-11-03 — Per‑Video Tail Validation
 - New eval mode: `--eval-mode tail-per-video` (classic + DL). Instead of a per‑class tail, we split within each video: head → train, mid → val, tail → test.
