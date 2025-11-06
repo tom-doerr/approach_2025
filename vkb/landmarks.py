@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import json
 
 
 def _fingerprint(video_path: str):
@@ -15,6 +16,80 @@ def _cache_path(video_path: str, stride: int) -> str:
     d = os.path.join(cache_root(), "landmarks")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, f"{_key_for(video_path)}_s{int(stride)}.npz")
+
+
+# --- Per-frame memmap cache (preferred) --------------------------------------
+def _lm_paths(video_path: str):
+    from .cache import frames_root, _key_for
+    base = os.path.join(frames_root(), _key_for(video_path))
+    return base + ".landmarks.meta.json", base + ".landmarks.f32"
+
+
+def _lm_lock_path(video_path: str):
+    from .cache import frames_root, _key_for
+    return os.path.join(frames_root(), _key_for(video_path)) + ".landmarks.lock"
+
+
+def _lm_write_meta(meta_path: str, meta: dict):
+    with open(meta_path, "w") as f:
+        json.dump(meta, f)
+
+
+def _lm_read_meta(meta_path: str):
+    with open(meta_path, "r") as f:
+        return json.load(f)
+
+
+def ensure_landmarks_memmap(video_path: str):
+    """Ensure a per-frame landmarks memmap exists and is up to date.
+
+    - Memmap shape: (n_frames, 21, 3) float32; rows default to NaN when no hand.
+    - Meta: {n, filled, src_size, src_mtime_ns, version}.
+    - Builds/extends by scanning from `filled` onward using stride=1.
+    """
+    from .cache import _count_frames_dims, _acquire_lock, _release_lock
+    meta_path, data_path = _lm_paths(video_path)
+    size, mtime = _fingerprint(video_path)
+
+    need_init = not (os.path.exists(meta_path) and os.path.exists(data_path))
+    if need_init:
+        n, _, _ = _count_frames_dims(video_path)
+        if n <= 0:
+            raise RuntimeError(f"no frames: {video_path}")
+        mm = np.memmap(data_path, dtype=np.float32, mode='w+', shape=(n, 21, 3))
+        mm[:] = np.nan; mm.flush()
+        _lm_write_meta(meta_path, {"n": int(n), "filled": 0, "src_size": int(size or -1), "src_mtime_ns": int(mtime or -1), "version": 1})
+
+    # Re-open with r+; re-init if fingerprint changed or size mismatch
+    meta = _lm_read_meta(meta_path)
+    n = int(meta.get("n", 0))
+    if n <= 0:
+        os.remove(meta_path); os.remove(data_path)
+        return ensure_landmarks_memmap(video_path)
+    mm = np.memmap(data_path, dtype=np.float32, mode='r+', shape=(n, 21, 3))
+    if int(meta.get("src_size", -1)) != int(size or -1) or int(meta.get("src_mtime_ns", -1)) != int(mtime or -1):
+        mm[:] = np.nan; mm.flush()
+        meta.update({"filled": 0, "src_size": int(size or -1), "src_mtime_ns": int(mtime or -1)})
+        _lm_write_meta(meta_path, meta)
+
+    # Extend if needed
+    filled = int(meta.get("filled", 0))
+    if filled < n:
+        lock = _lm_lock_path(video_path)
+        fd = _acquire_lock(lock, timeout=300.0)
+        try:
+            meta = _lm_read_meta(meta_path)
+            filled = int(meta.get("filled", 0))
+            if filled < n:
+                idx, lms = _compute_landmarks_for_stride(video_path, stride=1, max_frames=0, start_from=filled)
+                if len(idx) > 0:
+                    mm[idx] = lms.astype(np.float32)
+                mm.flush()
+                meta["filled"] = n
+                _lm_write_meta(meta_path, meta)
+        finally:
+            _release_lock(fd, lock)
+    return mm, meta
 
 
 def _compute_landmarks_for_stride(path: str, stride: int, max_frames: int, start_from: int = 0):
@@ -91,7 +166,27 @@ def extract_features_for_video(path: str, stride: int = 1, max_frames: int = 0) 
 
     Minimal by design; raises if mediapipe/opencv are unavailable.
     """
-    # Try cache first (per video+stride); invalidate on source fingerprint change
+    # Preferred path: per-frame memmap cache (independent of stride/cap)
+    try:
+        mm, meta = ensure_landmarks_memmap(path)
+        n = mm.shape[0]
+        lim = int(max_frames)
+        feats = []
+        kept = 0
+        for i in range(0, n, max(1, int(stride))):
+            row = mm[i]
+            # Skip if NaN row (no hand)
+            if not np.isfinite(row).any():
+                continue
+            feats.append(pairwise_distance_features(row))
+            kept += 1
+            if lim > 0 and kept >= lim:
+                break
+        if feats:
+            return np.stack(feats, axis=0)
+    except Exception:
+        pass
+    # Fallback: stride-scoped cache (legacy)
     fp_size, fp_mtime = _fingerprint(path)
     cpath = _cache_path(path, stride)
     if os.path.exists(cpath):

@@ -1177,6 +1177,12 @@ Tips
 - Dynamic extension: if a stride cache exists and you request more frames (or unlimited), we now append new landmark predictions from the last cached frame onward and update the cache automatically.
 - Gotcha (legacy capped caches): caches are keyed only by stride. Older caches created before 2025‑11‑06 will not contain the appended data until you trigger a re-run; to force a clean rebuild remove `._s<stride>.npz` files for that stride.
 
+### New: Per‑Frame Landmarks Memmap (preferred)
+- Storage: `.cache/vkb/frames/<hash>.landmarks.f32` (memmap, shape `n×21×3` float32), meta `.landmarks.meta.json` with `{n, filled, src_size, src_mtime_ns, version}`.
+- Behavior: first call builds (fills NaNs by default), then we extend from `filled` to end using stride=1. Training samples by your requested `--mp-stride` and ignores NaN rows (no hand).
+- Benefits: independent of stride/cap, no mixing on settings changes, predictable extension to the end of each video.
+- Tests: `tests/test_landmarks_memmap_basic.py`, `tests/test_landmarks_dynamic_extend.py` lock behavior.
+
 ### mp_logreg Artifacts & Inference
 - Artifacts: bundle contains `clf`, `labels`, `clf_name='mp_logreg'`, `embed_model='mediapipe_hand'`. Sidecar adds:
   - `feat_dim=210`, `frames`, `val_acc/test_acc`.
