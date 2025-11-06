@@ -1169,3 +1169,9 @@ Tips
 - We now cache MediaPipe landmark predictions per video+stride under `.cache/vkb/landmarks/<hash>_s<stride>.npz` with fields: `idx` (frame indices), `lm` (Nx21x3), and source fingerprint (`src_size`, `src_mtime_ns`).
 - `extract_features_for_video()` loads from cache when fingerprint matches; otherwise recomputes and writes the cache. Minimal design, no partial/incremental writes.
 - Test: `tests/test_landmarks_cache.py` ensures a second call with the same stride does not re-run the compute path.
+
+### mp_logreg Artifacts & Inference
+- Artifacts: bundle contains `clf`, `labels`, `clf_name='mp_logreg'`, `embed_model='mediapipe_hand'`. Sidecar adds:
+  - `feat_dim=210`, `frames`, `val_acc/test_acc`.
+  - `hparams`: `{C, mp_stride, mp_max_frames, feat_norm='l1', pairs='upper_xy', landmarks=21}`.
+- infer_live: detects mp_logreg by `clf_name` or `embed_model` and uses a MediaPipe embedder; shows `no_hand` when landmarks aren’t detected. Test: `tests/test_infer_live_mp_logreg.py`.

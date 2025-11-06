@@ -778,7 +778,7 @@ def _train_mediapipe_logreg(args):
         "val_acc": val_acc,
         "test_acc": test_acc,
         "frames": len(y),
-        "hparams": {"C": C},
+        "hparams": {"C": float(C), "mp_stride": int(getattr(args,'mp_stride',5)), "mp_max_frames": int(getattr(args,'mp_max_frames',200)), "feat_norm": "l1", "pairs": "upper_xy", "landmarks": 21},
     })
     # Print tiny HPO table if we ran it
     if trials:
