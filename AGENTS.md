@@ -1218,3 +1218,8 @@ Tips
   - CLI: `--clf mp_xgb` trains an `XGBClassifier` on the same 210‑D L1‑normalized pairwise distances used by `mp_logreg`.
   - Supports `--hpo-xgb` (random search) and tail/tail-per-video splits. Filenames include `val{ACC}` when a validation split is used.
   - Tests: `tests/test_mp_xgb_train_smoke.py` (smoke; stubs feature extractor, asserts saved path contains `mp_xgb` and `val`).
+  - HPO auto-extend: if best XGB params are near the edge of the search bounds, we expand the bounds (depth, n_estimators, lr, subsample, colsample, reg_lambda) and run a short top-up search. Helpers: `_xgb_default_bounds()`, `_needs_expand_xgb()`.
+
+### HPO Auto-Extend (LogReg + XGB)
+- Logistic Regression (`mp_logreg`): if the best `C` is near the boundary of the default range (`1e-4..1e8`), we expand the exponent range by ±2 and run a smaller second search, keeping the better of the two. Helper: `_needs_expand_logreg()`.
+- XGBoost (`mp_xgb`): after the first search with defaults, if the best params lie within ~10% of any bound, we widen bounds and re-run a smaller search. We keep the improved result if any. The behavior is documented and unit-tested (`tests/test_hpo_expand_detection.py`).

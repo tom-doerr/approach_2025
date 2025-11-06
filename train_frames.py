@@ -223,7 +223,10 @@ def _split_tail_per_video_slices(video_slices, val_frac: float, test_frac: float
     return tr_idx, va_idx, te_idx
 
 
-def _hpo_xgb(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, eval_frac: float | None = None):
+def _hpo_xgb(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, eval_frac: float | None = None,
+             depth_min: int = 2, depth_max: int = 6, n_estimators_min: int = 50, n_estimators_max: int = 1000,
+             lr_exp_min: float = -2.0, lr_exp_max: float = -0.5, subsample_min: float = 0.7, subsample_max: float = 1.0,
+             colsample_min: float = 0.7, colsample_max: float = 1.0, reg_lambda_exp_min: float = -3.0, reg_lambda_exp_max: float = 2.0):
     import numpy as np
     from sklearn.model_selection import train_test_split
     import xgboost as xgb
@@ -240,12 +243,12 @@ def _hpo_xgb(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, ev
     trials = []
     for i in range(max(1, iters)):
         params = {
-            'max_depth': int(rng.integers(2, 7)),
-            'n_estimators': int(rng.integers(50, 1001)),  # was 301 → allow larger ensembles
-            'learning_rate': float(10 ** rng.uniform(-2.0, -0.5)),  # ~0.01..0.32
-            'subsample': float(rng.uniform(0.7, 1.0)),
-            'colsample_bytree': float(rng.uniform(0.7, 1.0)),
-            'reg_lambda': float(10 ** rng.uniform(-3.0, 2.0)),  # was up to 10 → now up to 100
+            'max_depth': int(rng.integers(int(depth_min), int(depth_max)+1)),
+            'n_estimators': int(rng.integers(int(n_estimators_min), int(n_estimators_max)+1)),
+            'learning_rate': float(10 ** rng.uniform(float(lr_exp_min), float(lr_exp_max))),
+            'subsample': float(rng.uniform(float(subsample_min), float(subsample_max))),
+            'colsample_bytree': float(rng.uniform(float(colsample_min), float(colsample_max))),
+            'reg_lambda': float(10 ** rng.uniform(float(reg_lambda_exp_min), float(reg_lambda_exp_max))),
             'tree_method': 'hist',
             'n_jobs': 0,
         }
@@ -260,6 +263,44 @@ def _hpo_xgb(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, ev
         if s > best_s:
             best_p, best_s = params, s
     return best_p, best_s, trials
+
+
+def _xgb_default_bounds():
+    return {
+        'depth_min': 2, 'depth_max': 6,
+        'n_estimators_min': 50, 'n_estimators_max': 1000,
+        'lr_exp_min': -2.0, 'lr_exp_max': -0.5,
+        'subsample_min': 0.7, 'subsample_max': 1.0,
+        'colsample_min': 0.7, 'colsample_max': 1.0,
+        'reg_lambda_exp_min': -3.0, 'reg_lambda_exp_max': 2.0,
+    }
+
+
+def _needs_expand_xgb(best_params: dict, bounds: dict) -> bool:
+    # Heuristic: if best is within 10% of a numeric range end (or exactly equals an int bound), expand
+    near = False
+    def near_edge(val, lo, hi):
+        span = float(hi - lo)
+        if span <= 0: return False
+        rel_lo = (val - lo) / span
+        rel_hi = (hi - val) / span
+        return rel_lo < 0.1 or rel_hi < 0.1
+    if best_params is None:
+        return False
+    try:
+        if near_edge(best_params.get('max_depth', 0), bounds['depth_min'], bounds['depth_max']): near = True
+        if near_edge(best_params.get('n_estimators', 0), bounds['n_estimators_min'], bounds['n_estimators_max']): near = True
+        # learning_rate and reg_lambda are log-scale; check exponents
+        import math
+        le = math.log10(float(best_params.get('learning_rate', 0.1)))
+        if near_edge(le, bounds['lr_exp_min'], bounds['lr_exp_max']): near = True
+        re = math.log10(float(best_params.get('reg_lambda', 1.0)))
+        if near_edge(re, bounds['reg_lambda_exp_min'], bounds['reg_lambda_exp_max']): near = True
+        if near_edge(best_params.get('subsample', 1.0), bounds['subsample_min'], bounds['subsample_max']): near = True
+        if near_edge(best_params.get('colsample_bytree', 1.0), bounds['colsample_min'], bounds['colsample_max']): near = True
+    except Exception:
+        pass
+    return near
 
 
 def _sort_ridge_trials(trials):
@@ -293,7 +334,7 @@ def _fmt_xgb_params(p: dict) -> str:
     return ", ".join(parts)
 
 
-def _hpo_logreg(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, eval_frac: float | None = None, max_iter: int = 500, solver: str = 'lbfgs'):
+def _hpo_logreg(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, eval_frac: float | None = None, max_iter: int = 500, solver: str = 'lbfgs', c_exp_min: float = -4.0, c_exp_max: float = 8.0):
     import numpy as np
     from sklearn.model_selection import train_test_split
     from sklearn.linear_model import LogisticRegression
@@ -307,8 +348,7 @@ def _hpo_logreg(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None,
     best_C, best_s = None, -1.0
     trials = []
     for i in range(max(1, iters)):
-        # Wider default search: 1e-4 .. 1e8
-        C = float(10 ** rng.uniform(-4, 8))
+        C = float(10 ** rng.uniform(float(c_exp_min), float(c_exp_max)))
         clf = LogisticRegression(C=C, max_iter=max_iter, solver=solver).fit(Xtr, ytr)
         s = float(clf.score(Xva, yva))
         trials.append((C, s))
@@ -318,6 +358,19 @@ def _hpo_logreg(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None,
         if s > best_s:
             best_C, best_s = C, s
     return best_C, best_s, trials
+
+
+def _needs_expand_logreg(best_C: float, c_exp_min: float, c_exp_max: float) -> bool:
+    import math
+    if best_C is None or best_C <= 0:
+        return False
+    e = math.log10(float(best_C))
+    span = float(c_exp_max - c_exp_min)
+    if span <= 0:
+        return False
+    rel_lo = (e - c_exp_min) / span
+    rel_hi = (c_exp_max - e) / span
+    return (rel_lo < 0.1) or (rel_hi < 0.1)
 
 
 def _make_sample_weights_from_labels(y, n_classes: int):
@@ -734,7 +787,16 @@ def _train_mediapipe_logreg(args):
     val_acc = None
     trials = []
     if int(getattr(args, 'hpo_logreg', 0) or 0) > 0:
-        C, _hpo_val, trials = _hpo_logreg(X, y, iters=int(args.hpo_logreg), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter))
+        # initial range 1e-4..1e8
+        cmin, cmax = -4.0, 8.0
+        C, _hpo_val, trials = _hpo_logreg(X, y, iters=int(args.hpo_logreg), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter), c_exp_min=cmin, c_exp_max=cmax)
+        # Expand if near bounds
+        if _needs_expand_logreg(C, cmin, cmax):
+            cons.print("[dim]HPO-LogReg: best C near bound; expanding search and running again[/]")
+            cmin2, cmax2 = cmin - 2.0, cmax + 2.0
+            C2, _hpo_val2, trials2 = _hpo_logreg(X, y, iters=max(3, int(args.hpo_logreg)//2), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter), c_exp_min=cmin2, c_exp_max=cmax2)
+            if (_hpo_val2 or -1) > (_hpo_val or -1):
+                C, _hpo_val, trials = C2, _hpo_val2, trials + trials2
     clf = LogisticRegression(C=float(C), max_iter=int(args.logreg_max_iter), solver='lbfgs')
     # Split train/val/test
     X_fit, y_fit = X, y
@@ -834,8 +896,26 @@ def _train_mediapipe_xgb(args):
     # choose params via HPO if requested
     if int(getattr(args, 'hpo_xgb', 0) or 0) > 0:
         frac = _va if (0.0 < _va < 0.9) else 0.2
-        best_p, _, trials = _hpo_xgb(X, y, iters=int(args.hpo_xgb), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial {i}: val_acc={s:.3f}[/]"))
+        bnds = _xgb_default_bounds()
+        best_p, best_s, trials = _hpo_xgb(X, y, iters=int(args.hpo_xgb), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial {i}: val_acc={s:.3f}[/]"), **bnds)
+        # If best lies near a boundary, expand and re-run a smaller top-up search
+        if _needs_expand_xgb(best_p, bnds):
+            cons.print("[dim]HPO-XGB: best near bound; expanding search and running again[/]")
+            # Expand bounds moderately
+            bnds2 = dict(bnds)
+            bnds2['depth_max'] = max(bnds['depth_max']*2, bnds['depth_max']+4)
+            bnds2['n_estimators_max'] = max(bnds['n_estimators_max']*2, 1500)
+            bnds2['lr_exp_min'] = min(bnds['lr_exp_min']-1.0, -4.0)
+            bnds2['lr_exp_max'] = max(bnds['lr_exp_max']+0.5, 0.0)
+            bnds2['subsample_min'] = min(0.5, bnds['subsample_min'])
+            bnds2['colsample_min'] = min(0.5, bnds['colsample_min'])
+            bnds2['reg_lambda_exp_min'] = min(bnds['reg_lambda_exp_min']-1.0, -4.0)
+            bnds2['reg_lambda_exp_max'] = max(bnds['reg_lambda_exp_max']+1.0, 3.0)
+            best_p2, best_s2, trials2 = _hpo_xgb(X, y, iters=max(3, int(args.hpo_xgb)//2), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial+ {i}: val_acc={s:.3f}[/]"), **bnds2)
+            if best_s2 > best_s:
+                best_p, best_s, trials = best_p2, best_s2, trials + trials2
         params = best_p
+    trained_on_val = False
     if _te > 0.0 or _va > 0.0:
         import numpy as _np
         if args.eval_mode == 'tail-per-video':
@@ -849,13 +929,16 @@ def _train_mediapipe_xgb(args):
             clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
             clf.fit(Xtr, ytr)
             val_acc = float(clf.score(Xva, yva))
+            trained_on_val = True
         if te_idx:
             X_test = list(Xarr[te_idx]); y_test = list(yarr[te_idx])
         X_fit, y_fit = list(Xarr[tr_idx] if tr_idx else Xarr), list(yarr[tr_idx] if tr_idx else yarr)
     if clf is None:
         clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
-    cons.print(f"[dim]Training mp_xgb...[/]")
-    clf.fit(X_fit, y_fit)
+    # Avoid long refit when we already trained on the train split for val
+    if not trained_on_val:
+        cons.print(f"[dim]Training mp_xgb...[/]")
+        clf.fit(X_fit, y_fit)
     from vkb.artifacts import save_model, save_sidecar
     name_parts = ["mp_xgb", "mediapipe_hand"]
     if val_acc is not None:
