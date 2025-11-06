@@ -1175,3 +1175,4 @@ Tips
   - `feat_dim=210`, `frames`, `val_acc/test_acc`.
   - `hparams`: `{C, mp_stride, mp_max_frames, feat_norm='l1', pairs='upper_xy', landmarks=21}`.
 - infer_live: detects mp_logreg by `clf_name` or `embed_model` and uses a MediaPipe embedder; shows `no_hand` when landmarks aren’t detected. Test: `tests/test_infer_live_mp_logreg.py`.
+  - Verified live run path with tests; usage: `python infer_live.py --frames 200` after training `--clf mp_logreg`. Requires `mediapipe` + `opencv-python` installed.
