@@ -81,6 +81,51 @@ def choose_model_path(cli_path: str | None, base_dir: str = "models") -> str:
     return cli_path or latest_model(base)
 
 
+def _summarize_classic(clf):
+    try:
+        name = type(clf).__name__
+        # Known sklearn/XGB keys (keep concise)
+        if name == 'LogisticRegression':
+            return f"type={name} C={getattr(clf,'C',None)} solver={getattr(clf,'solver',None)} max_iter={getattr(clf,'max_iter',None)}"
+        if name == 'RidgeClassifier':
+            return f"type={name} alpha={getattr(clf,'alpha',None)}"
+        if name == 'XGBClassifier':
+            gp = getattr(clf, 'get_xgb_params', None)
+            p = gp() if gp else getattr(clf, 'get_params', lambda: {})()
+            def g(k, default=None):
+                return p.get(k, default)
+            return (
+                f"type={name} est={g('n_estimators', '?')} depth={g('max_depth','?')} lr={g('learning_rate','?')} "
+                f"sub={g('subsample','?')} col={g('colsample_bytree','?')} reg_lambda={g('reg_lambda','?')}"
+            )
+        # Generic sklearn: show class and a couple of params if available
+        gp = getattr(clf, 'get_params', None)
+        if gp:
+            p = gp()
+            some = []
+            for k in ('alpha','C','max_iter','n_estimators','max_depth'):
+                if k in p: some.append(f"{k}={p[k]}")
+            return "type=" + name + (" " + " ".join(some) if some else '')
+        return f"type={name}"
+    except Exception:
+        return "type=unknown"
+
+
+def _summarize_dl(bundle):
+    try:
+        model_name = bundle.get('model_name') or bundle.get('backbone') or '?'
+        insz = bundle.get('input_size') or '?'
+        norm = bundle.get('normalize') or {}
+        drop = bundle.get('dropout', None)
+        dropp = bundle.get('drop_path', None)
+        extra = []
+        if drop is not None: extra.append(f"dropout={drop}")
+        if dropp is not None: extra.append(f"drop_path={dropp}")
+        return f"backbone={model_name} input={insz} " + (" ".join(extra))
+    except Exception:
+        return "backbone=?"
+
+
 def _check_feat_dim(clf, feat_len: int):
     n = getattr(clf, "n_features_in_", None)
     if n is not None and n != feat_len:
@@ -257,8 +302,10 @@ def main():
     cons.print(f"[bold green]Loaded[/]: [magenta]{path}[/]")
     if clf is not None:
         cons.print(f"[bold]Model[/]: [cyan]{bundle['clf_name']}[/] | [cyan]{model_name}[/]")
+        cons.print(f"[dim]Params: {_summarize_classic(clf)}[/]")
     else:
         cons.print(f"[bold]Model[/]: [cyan]finetune[/] | [cyan]{bundle.get('model_name','?')}[/]")
+        cons.print(f"[dim]Params: {_summarize_dl(bundle)}[/]")
     fps, last_t = 0.0, perf_counter()
     emb_ms = 0.0  # preprocess or embed time
     proc_ms = 0.0

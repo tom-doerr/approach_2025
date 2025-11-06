@@ -1195,8 +1195,12 @@ Tips
 - infer_live: detects mp_logreg by `clf_name` or `embed_model` and uses a MediaPipe embedder; shows `no_hand` when landmarks aren’t detected. Test: `tests/test_infer_live_mp_logreg.py`.
 - Verified live run path with tests; usage: `python infer_live.py --frames 200` after training `--clf mp_logreg`. Requires `mediapipe` + `opencv-python` installed.
   - Overlay: we now draw detected landmarks as small yellow points on the live frame in mp_logreg mode. Minimal rendering (points only, no connections) to keep code simple.
-- Probabilities/Raw: infer_live overlays per-class raw scores and probabilities for classic models (uses `decision_function`/`predict_proba` when available; XGB uses `predict_proba`). DL path shows logits and softmax. Test: `tests/test_infer_live_probs_text.py`.
+  - Probabilities/Raw: infer_live overlays per-class raw scores and probabilities for classic models (uses `decision_function`/`predict_proba` when available; XGB uses `predict_proba`). DL path shows logits and softmax. Test: `tests/test_infer_live_probs_text.py`.
   - Label text correctness: fixed a bug where label text could show `None` when no-hand or stale state; per-frame variables now reset and label is assigned right after prediction. Test: `tests/test_infer_live_label_text_updates.py`.
+  - Parameter print: infer_live now prints a concise param summary on start.
+    - Classic: classifier type and key params (e.g., `type=LogisticRegression C=... solver=...`, or `type=XGBClassifier est=... depth=... lr=...`).
+    - DL: backbone, input size, and optional `dropout`/`drop_path` if present.
+    - Test: `tests/test_infer_live_params_print.py` asserts presence of the param line for a LogReg bundle.
 
 - ### mp_stride (definition & guidance)
 - `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples. Default: `1` (no stride, process every frame).
