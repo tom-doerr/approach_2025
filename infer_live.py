@@ -111,6 +111,34 @@ def _xgb_fast_predict(clf, feat):
         return None
 
 
+def _make_mp_embedder():
+    """Return (embed_fn, cleanup) for MediaPipe landmark features.
+
+    embed_fn(frame) -> feature vector (210,) or None when no hand.
+    """
+    import numpy as np
+    try:
+        import mediapipe as mp
+    except Exception as e:
+        raise RuntimeError("mediapipe is required for mp_logreg inference") from e
+    from vkb.landmarks import pairwise_distance_features
+    hands = mp.solutions.hands.Hands(
+        static_image_mode=False, max_num_hands=1, min_detection_confidence=0.5, min_tracking_confidence=0.5
+    )
+    def embed(frame):
+        rgb = frame[:, :, ::-1]
+        res = hands.process(rgb)
+        if not getattr(res, 'multi_hand_landmarks', None):
+            return None
+        lm = res.multi_hand_landmarks[0].landmark
+        pts = np.array([[p.x, p.y, getattr(p, 'z', 0.0)] for p in lm], dtype=float)
+        return pairwise_distance_features(pts)
+    def cleanup():
+        try: hands.close()
+        except Exception: pass
+    return embed, cleanup
+
+
 def main():
     import cv2 as cv
     from time import perf_counter
@@ -160,10 +188,15 @@ def main():
             Console().print(f"[red]DL infer disabled: {type(e).__name__}: {e}[/]")
             return
     else:
-        # Classic path
+        # Classic path (incl. mp_logreg)
         model_name = bundle.get("embed_model", "?")
         title = f"infer: {clf_name} | {model_name}"
-        embed = create_embedder(model_name)
+        mp_mode = (clf_name == 'mp_logreg') or (model_name == 'mediapipe_hand')
+        mp_cleanup = None
+        if mp_mode:
+            embed, mp_cleanup = _make_mp_embedder()
+        else:
+            embed = create_embedder(model_name)
 
     cap = cv.VideoCapture(0)
     if not cap.isOpened():
@@ -189,17 +222,22 @@ def main():
             emb_t0 = perf_counter()
             feat = embed(frame)
             emb_ms = (perf_counter() - emb_t0) * 1000.0
-            try:
-                _check_feat_dim(clf, len(feat))
-            except ValueError as e:
-                cons.print(f"[bold red]{e}[/]")
-                break
-            clf_t0 = perf_counter()
-            pred_idx = _xgb_fast_predict(clf, feat)
-            if pred_idx is None:
-                pred = clf.predict([feat])[0]
-                pred_idx = int(pred) if not hasattr(pred, 'item') else int(pred.item())
-            clf_ms = (perf_counter() - clf_t0) * 1000.0
+            if feat is None:
+                lab = 'no_hand'
+                pred_idx = 0
+                clf_ms = 0.0
+            else:
+                try:
+                    _check_feat_dim(clf, len(feat))
+                except ValueError as e:
+                    cons.print(f"[bold red]{e}[/]")
+                    break
+                clf_t0 = perf_counter()
+                pred_idx = _xgb_fast_predict(clf, feat)
+                if pred_idx is None:
+                    pred = clf.predict([feat])[0]
+                    pred_idx = int(pred) if not hasattr(pred, 'item') else int(pred.item())
+                clf_ms = (perf_counter() - clf_t0) * 1000.0
         else:
             # DL path
             emb_t0 = perf_counter()
@@ -211,7 +249,8 @@ def main():
                 logits = dl_model(x)
                 pred_idx = int(logits.argmax(dim=1).item())
                 clf_ms = (perf_counter() - clf_t0) * 1000.0
-        lab = labels[pred_idx]
+        if 'lab' not in locals() or lab == 'no_hand':
+            lab = labels[pred_idx] if (clf is None or (feat is not None)) else 'no_hand'
         # update fps
         now = perf_counter(); dt = now - last_t; last_t = now
         proc_ms = (now - frame_t0) * 1000.0
@@ -231,6 +270,10 @@ def main():
             if frames_left <= 0:
                 break
     cap.release(); cv.destroyAllWindows()
+    try:
+        if locals().get('mp_cleanup'): mp_cleanup()
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
