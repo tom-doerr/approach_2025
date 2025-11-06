@@ -9,4 +9,4 @@ def test_hpo_logreg_range_includes_large_C():
     C, s, trials = _hpo_logreg(X, y, iters=30, seed=0, idx_by_class=idx, eval_frac=0.3)
     Cs = [Cv for Cv,_ in trials]
     assert min(Cs) <= 1e-3
-    assert max(Cs) >= 1e3
+    assert max(Cs) >= 1e4

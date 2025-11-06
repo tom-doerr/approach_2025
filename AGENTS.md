@@ -1166,7 +1166,12 @@ Tips
   - Workers are not used here; for GPU overlap questions use the DL path. Repro is deterministic given inputs.
 
 ### LogReg C selection (defaults)
-- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set. Range: `C ∈ [1e-4, 1e4]`.
+- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set. Range: `C ∈ [1e-4, 1e6]`.
+
+### What is `C` (Logistic Regression)?
+- `C` is the inverse of L2 regularization strength in scikit‑learn’s `LogisticRegression`.
+- Objective (schematically): logistic_loss + (1/C)·(1/2)||w||². Larger `C` ⇒ weaker regularization (tighter fit, higher variance). Smaller `C` ⇒ stronger regularization (smoother fit, higher bias).
+- Our mp_logreg features are L1‑normalized distances (210 dims). Reasonable `C` often lands between `1e-2` and `1e3`, but we search `1e-4..1e4` by default.
 - Disable this by setting `--hpo-logreg 0` to use the literal default `C=1.0`.
 - Filename `_val{ACC}` comes from the final evaluation split you configured; HPO’s internal split does not affect the filename.
 
