@@ -307,8 +307,8 @@ def _hpo_logreg(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None,
     best_C, best_s = None, -1.0
     trials = []
     for i in range(max(1, iters)):
-        # Wider default search: 1e-4 .. 1e7
-        C = float(10 ** rng.uniform(-4, 7))
+        # Wider default search: 1e-4 .. 1e8
+        C = float(10 ** rng.uniform(-4, 8))
         clf = LogisticRegression(C=C, max_iter=max_iter, solver=solver).fit(Xtr, ytr)
         s = float(clf.score(Xva, yva))
         trials.append((C, s))

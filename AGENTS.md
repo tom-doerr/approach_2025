@@ -1166,7 +1166,7 @@ Tips
   - Workers are not used here; for GPU overlap questions use the DL path. Repro is deterministic given inputs.
 
 ### LogReg C selection (defaults)
-- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set. Range: `C ∈ [1e-4, 1e7]`.
+- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set. Range: `C ∈ [1e-4, 1e8]`.
 
 ### What is `C` (Logistic Regression)?
 - `C` is the inverse of L2 regularization strength in scikit‑learn’s `LogisticRegression`.
