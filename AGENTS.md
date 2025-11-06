@@ -1214,3 +1214,7 @@ Tips
   - mp_logreg (landmarks): `python train_frames.py --clf mp_logreg --data data --eval-split 0.2 --mp-stride 5 --mp-max-frames 200`
   - Classic ridge (embeddings): `python train_frames.py --clf ridge --data data --eval-split 0.2`
 - Tips: start with modest `mp_stride` (5–10) and `mp_max_frames` (100–300). Landmark caches make subsequent runs faster.
+- New training mode: MediaPipe landmarks + XGBoost
+  - CLI: `--clf mp_xgb` trains an `XGBClassifier` on the same 210‑D L1‑normalized pairwise distances used by `mp_logreg`.
+  - Supports `--hpo-xgb` (random search) and tail/tail-per-video splits. Filenames include `val{ACC}` when a validation split is used.
+  - Tests: `tests/test_mp_xgb_train_smoke.py` (smoke; stubs feature extractor, asserts saved path contains `mp_xgb` and `val`).

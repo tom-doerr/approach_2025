@@ -11,7 +11,7 @@ def parse_args(argv=None):
     p.add_argument("--data", default="data")
     p.add_argument("--embed-model", dest="embed_model", default="mobilenetv3_small_100", help="Classic path: embedding backbone for ridge/xgb/logreg")
     p.add_argument("--backbone", dest="backbone", default="mobilenetv3_small_100", help="DL path: timm backbone for fine‑tune (separate from --embed-model)")
-    p.add_argument("--clf", choices=["xgb","ridge","logreg","dl","mp_logreg"], default="xgb")
+    p.add_argument("--clf", choices=["xgb","ridge","logreg","dl","mp_logreg","mp_xgb"], default="xgb")
     p.add_argument("--alpha", type=float, default=1.0, help="Ridge alpha")
     p.add_argument("--hpo-alpha", type=int, default=10, help="Ridge HPO iterations (log-uniform alpha)")
     p.add_argument("--hpo-xgb", type=int, default=10, help="XGBoost HPO trials (random search)")
@@ -792,6 +792,95 @@ def _train_mediapipe_logreg(args):
     return path
 
 
+def _train_mediapipe_xgb(args):
+    from rich.console import Console
+    cons = Console()
+    from vkb.io import list_videos
+    vids = list_videos(args.data)
+    if not vids:
+        raise RuntimeError(f"no videos under {args.data}")
+    labels = sorted({lab for _, lab in vids})
+    lab2i = {lab: i for i, lab in enumerate(labels)}
+    # Features
+    from vkb.landmarks import extract_features_for_video
+    import numpy as np
+    X, y = [], []
+    idx_by_class = {i: [] for i in range(len(labels))}
+    video_slices = []
+    start = 0
+    for path, lab in vids:
+        feats = extract_features_for_video(path, stride=int(getattr(args,'mp_stride',1)), max_frames=int(getattr(args,'mp_max_frames',0)))
+        if feats.size == 0:
+            continue
+        n = feats.shape[0]
+        ci = lab2i[lab]
+        X.extend(feats)
+        y.extend([ci] * n)
+        idx_by_class[ci].extend(range(start, start + n))
+        video_slices.append((start, start + n))
+        start += n
+    if not X:
+        raise RuntimeError("no landmark features extracted; check mediapipe installation and video content")
+    cons.print(f"[dim]Prepared features: frames={len(y)} classes={len(labels)} feat_dim={len(X[0])}[/]")
+    # Classifier (optionally HPO)
+    import xgboost as xgb
+    params = None
+    clf = None
+    val_acc = None
+    X_fit, y_fit = X, y
+    X_test = y_test = None
+    _te = float(getattr(args, 'test_split', 0.0) or 0.0)
+    _va = float(getattr(args, 'eval_split', 0.0) or 0.0)
+    # choose params via HPO if requested
+    if int(getattr(args, 'hpo_xgb', 0) or 0) > 0:
+        frac = _va if (0.0 < _va < 0.9) else 0.2
+        best_p, _, trials = _hpo_xgb(X, y, iters=int(args.hpo_xgb), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial {i}: val_acc={s:.3f}[/]"))
+        params = best_p
+    if _te > 0.0 or _va > 0.0:
+        import numpy as _np
+        if args.eval_mode == 'tail-per-video':
+            tr_idx, va_idx, te_idx = _split_tail_per_video_slices(video_slices, _va, _te)
+        else:
+            tr_idx, va_idx, te_idx = _split_tail_indices_three(idx_by_class, _va, _te)
+        Xarr = _np.asarray(X, dtype=object); yarr = _np.asarray(y)
+        if va_idx:
+            Xva = list(Xarr[va_idx]); yva = list(yarr[va_idx])
+            Xtr = list(Xarr[tr_idx]); ytr = list(yarr[tr_idx])
+            clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
+            clf.fit(Xtr, ytr)
+            val_acc = float(clf.score(Xva, yva))
+        if te_idx:
+            X_test = list(Xarr[te_idx]); y_test = list(yarr[te_idx])
+        X_fit, y_fit = list(Xarr[tr_idx] if tr_idx else Xarr), list(yarr[tr_idx] if tr_idx else yarr)
+    if clf is None:
+        clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
+    cons.print(f"[dim]Training mp_xgb...[/]")
+    clf.fit(X_fit, y_fit)
+    from vkb.artifacts import save_model, save_sidecar
+    name_parts = ["mp_xgb", "mediapipe_hand"]
+    if val_acc is not None:
+        name_parts.append(f"val{float(val_acc):.3f}")
+    path = save_model({"clf": clf, "labels": labels, "clf_name": "mp_xgb", "embed_model": "mediapipe_hand", "embed_params": {}}, name_parts)
+    test_acc = None
+    if X_test is not None:
+        try:
+            test_acc = float(clf.score(X_test, y_test))
+        except Exception:
+            test_acc = None
+    save_sidecar(path, {
+        "clf_name": "mp_xgb",
+        "embed_model": "mediapipe_hand",
+        "eval_split": getattr(args, 'eval_split', None),
+        "eval_mode": getattr(args, 'eval_mode', None),
+        "labels": labels,
+        "feat_dim": 210,
+        "val_acc": val_acc,
+        "test_acc": test_acc,
+        "frames": len(y),
+        "hparams": {"xgb_params": params or {"n_estimators":200,"max_depth":5}},
+    })
+    return path
+
 def train(args):
     # Build unified config and attach for downstream consumers
     try:
@@ -809,6 +898,8 @@ def train(args):
         return _train_dl(args)
     if args.clf == "mp_logreg":
         return _train_mediapipe_logreg(args)
+    if args.clf == "mp_xgb":
+        return _train_mediapipe_xgb(args)
     return _train_classic(args)
 
 
