@@ -1165,3 +1165,7 @@ Tips
   - When MediaPipe isn’t installed, `mp_logreg` raises clearly; tests stub the extractor instead.
   - Workers are not used here; for GPU overlap questions use the DL path. Repro is deterministic given inputs.
 
+### Landmarks Cache (mp_logreg)
+- We now cache MediaPipe landmark predictions per video+stride under `.cache/vkb/landmarks/<hash>_s<stride>.npz` with fields: `idx` (frame indices), `lm` (Nx21x3), and source fingerprint (`src_size`, `src_mtime_ns`).
+- `extract_features_for_video()` loads from cache when fingerprint matches; otherwise recomputes and writes the cache. Minimal design, no partial/incremental writes.
+- Test: `tests/test_landmarks_cache.py` ensures a second call with the same stride does not re-run the compute path.
