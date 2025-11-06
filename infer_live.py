@@ -114,7 +114,8 @@ def _xgb_fast_predict(clf, feat):
 def _make_mp_embedder():
     """Return (embed_fn, cleanup) for MediaPipe landmark features.
 
-    embed_fn(frame) -> feature vector (210,) or None when no hand.
+    embed_fn(frame) -> (feature (210,) | None, pts_px | None)
+    where pts_px is a list of (x,y) pixel coords for drawing.
     """
     import numpy as np
     try:
@@ -129,10 +130,13 @@ def _make_mp_embedder():
         rgb = frame[:, :, ::-1]
         res = hands.process(rgb)
         if not getattr(res, 'multi_hand_landmarks', None):
-            return None
+            return None, None
         lm = res.multi_hand_landmarks[0].landmark
         pts = np.array([[p.x, p.y, getattr(p, 'z', 0.0)] for p in lm], dtype=float)
-        return pairwise_distance_features(pts)
+        # pixel coords for overlay
+        h, w = frame.shape[:2]
+        pts_px = [(int(min(max(px * w, 0), w - 1)), int(min(max(py * h, 0), h - 1))) for px, py, _ in pts]
+        return pairwise_distance_features(pts), pts_px
     def cleanup():
         try: hands.close()
         except Exception: pass
@@ -220,7 +224,11 @@ def main():
             break
         if clf is not None:
             emb_t0 = perf_counter()
-            feat = embed(frame)
+            if 'mp_mode' in locals() and mp_mode:
+                feat, lm_pts = embed(frame)
+            else:
+                feat = embed(frame)
+                lm_pts = None
             emb_ms = (perf_counter() - emb_t0) * 1000.0
             if feat is None:
                 lab = 'no_hand'
@@ -258,6 +266,12 @@ def main():
             inst = 1.0/dt
             fps = inst if fps == 0.0 else (0.9*fps + 0.1*inst)
         # overlay
+        if 'lm_pts' in locals() and lm_pts:
+            try:
+                for (x, y) in lm_pts:
+                    cv.circle(frame, (int(x), int(y)), 2, (0, 255, 255), -1, lineType=cv.LINE_AA)
+            except Exception:
+                pass
         cv.putText(frame, str(lab), (12, 28), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv.LINE_AA)
         cv.putText(frame, f"FPS: {fps:.1f}", (12, 56), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2, cv.LINE_AA)
         cv.putText(frame, f"Proc: {proc_ms:.1f} ms  Emb: {emb_ms:.1f} ms  Clf: {clf_ms:.1f} ms", (12, 82), cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 255), 2, cv.LINE_AA)

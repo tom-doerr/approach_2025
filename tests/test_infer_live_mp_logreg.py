@@ -38,6 +38,7 @@ class TestInferLiveMPLogReg(unittest.TestCase):
                 def imshow(self, *_): pass
                 def destroyAllWindows(self): pass
                 def putText(self, *a, **k): pass
+                def circle(self, *a, **k): pass
                 FONT_HERSHEY_SIMPLEX = 0
                 LINE_AA = 0
                 def cvtColor(self, img, code): return img
