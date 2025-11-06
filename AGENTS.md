@@ -1177,3 +1177,21 @@ Tips
 - infer_live: detects mp_logreg by `clf_name` or `embed_model` and uses a MediaPipe embedder; shows `no_hand` when landmarks aren’t detected. Test: `tests/test_infer_live_mp_logreg.py`.
   - Verified live run path with tests; usage: `python infer_live.py --frames 200` after training `--clf mp_logreg`. Requires `mediapipe` + `opencv-python` installed.
   - Overlay: we now draw detected landmarks as small yellow points on the live frame in mp_logreg mode. Minimal rendering (points only, no connections) to keep code simple.
+
+### mp_stride (definition & guidance)
+- `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples.
+- The stride value is part of the landmark cache key: `.cache/vkb/landmarks/<hash>_sN.npz`. Changing `N` builds a new cache.
+- Sidecar records `mp_stride`. Live inference ignores stride (runs per frame).
+- Quick guidance: use 3–10 for longer videos; smaller for short clips to keep per-class ≥2 samples under tail splits.
+
+### mp_max_frames (definition & caveat)
+- `--mp-max-frames K` caps how many frames per video we keep after applying `mp_stride` (e.g., K=200 keeps the first 200 sampled frames). It speeds up training and keeps classes balanced across videos. Default: `200`.
+- Recorded in the sidecar (`hparams.mp_max_frames`). Live inference ignores this.
+- Cache caveat: landmark cache files are keyed by stride only. If you cached with a small `mp_max_frames` and later raise it, we still return the cached subset. Delete matching `.cache/vkb/landmarks/*_s<stride>.npz` to rebuild with a larger cap.
+
+### data_small and running on full data
+- `data_small/` is a tiny, repo-contained example dataset (labels: `PgDown`, `PgUp`, `no_input`) used by tests and for quick sanity runs.
+- Full dataset uses `data/` (default). Example runs:
+  - mp_logreg (landmarks): `python train_frames.py --clf mp_logreg --data data --eval-split 0.2 --mp-stride 5 --mp-max-frames 200`
+  - Classic ridge (embeddings): `python train_frames.py --clf ridge --data data --eval-split 0.2`
+- Tips: start with modest `mp_stride` (5–10) and `mp_max_frames` (100–300). Landmark caches make subsequent runs faster.
