@@ -269,13 +269,14 @@ def main():
         ok, frame = cap.read()
         if not ok:
             break
+        # Reset per-frame diagnostics to avoid stale overlays
+        raw = None; prob = None; lm_pts = None; lab = None
         if clf is not None:
             emb_t0 = perf_counter()
             if 'mp_mode' in locals() and mp_mode:
                 feat, lm_pts = embed(frame)
             else:
                 feat = embed(frame)
-                lm_pts = None
             emb_ms = (perf_counter() - emb_t0) * 1000.0
             if feat is None:
                 lab = 'no_hand'
@@ -301,6 +302,7 @@ def main():
                     else:
                         pred_idx = int(pi)
                 clf_ms = (perf_counter() - clf_t0) * 1000.0
+                lab = labels[pred_idx]
         else:
             # DL path
             emb_t0 = perf_counter()
@@ -312,8 +314,7 @@ def main():
                 logits = dl_model(x)
                 pred_idx = int(logits.argmax(dim=1).item())
                 clf_ms = (perf_counter() - clf_t0) * 1000.0
-        if 'lab' not in locals() or lab == 'no_hand':
-            lab = labels[pred_idx] if (clf is None or (feat is not None)) else 'no_hand'
+            lab = labels[pred_idx]
         # update fps
         now = perf_counter(); dt = now - last_t; last_t = now
         proc_ms = (now - frame_t0) * 1000.0
