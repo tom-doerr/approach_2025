@@ -389,6 +389,12 @@ def main():
                 if 'prob' in locals() and prob is not None:
                     txt = "prob=[" + " ".join(f"{float(p):.2f}" for p in prob.tolist()) + "]"
                     cv.putText(frame, txt, (12, y0), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 255, 180), 2, cv.LINE_AA); y0 += 22
+                    # Also print class-named probabilities
+                    try:
+                        named = "prob_names=" + " ".join(f"{labels[i]}={float(prob[i]):.2f}" for i in range(len(labels)))
+                        cv.putText(frame, named, (12, y0), cv.FONT_HERSHEY_SIMPLEX, 0.6, (160, 255, 160), 2, cv.LINE_AA); y0 += 22
+                    except Exception:
+                        pass
             else:
                 # DL path: show logits and softmax
                 import torch
@@ -398,6 +404,11 @@ def main():
                 cv.putText(frame, txt, (12, 108), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 200, 255), 2, cv.LINE_AA)
                 txt = "prob=[" + " ".join(f"{float(q):.2f}" for q in p) + "]"
                 cv.putText(frame, txt, (12, 130), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 255, 180), 2, cv.LINE_AA)
+                try:
+                    named = "prob_names=" + " ".join(f"{labels[i]}={float(p[i]):.2f}" for i in range(len(labels)))
+                    cv.putText(frame, named, (12, 152), cv.FONT_HERSHEY_SIMPLEX, 0.6, (160, 255, 160), 2, cv.LINE_AA)
+                except Exception:
+                    pass
         except Exception:
             pass
         cv.imshow(title, frame)

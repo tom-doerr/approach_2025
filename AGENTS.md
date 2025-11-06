@@ -1201,6 +1201,7 @@ Tips
     - Classic: classifier type and key params (e.g., `type=LogisticRegression C=... solver=...`, or `type=XGBClassifier est=... depth=... lr=...`).
     - DL: backbone, input size, and optional `dropout`/`drop_path` if present.
     - Test: `tests/test_infer_live_params_print.py` asserts presence of the param line for a LogReg bundle.
+  - Probabilities with names: we now print a second line `prob_names=label=prob ...` mapping each class name to its probability alongside the vector form. Test: `tests/test_infer_live_prob_names.py`.
 
 - ### mp_stride (definition & guidance)
 - `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples. Default: `1` (no stride, process every frame).
