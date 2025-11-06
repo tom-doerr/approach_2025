@@ -1178,11 +1178,11 @@ Tips
   - Verified live run path with tests; usage: `python infer_live.py --frames 200` after training `--clf mp_logreg`. Requires `mediapipe` + `opencv-python` installed.
   - Overlay: we now draw detected landmarks as small yellow points on the live frame in mp_logreg mode. Minimal rendering (points only, no connections) to keep code simple.
 
-### mp_stride (definition & guidance)
-- `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples.
+- ### mp_stride (definition & guidance)
+- `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples. Default: `1` (no stride, process every frame).
 - The stride value is part of the landmark cache key: `.cache/vkb/landmarks/<hash>_sN.npz`. Changing `N` builds a new cache.
 - Sidecar records `mp_stride`. Live inference ignores stride (runs per frame).
-- Quick guidance: use 3–10 for longer videos; smaller for short clips to keep per-class ≥2 samples under tail splits.
+- Quick guidance: keep default `1` for small sets; for longer videos use 3–10 to reduce duplicates and speed up extraction.
 
 ### mp_max_frames (definition & caveat)
 - `--mp-max-frames K` caps how many frames per video we keep after applying `mp_stride` (e.g., K=200 keeps the first 200 sampled frames). It speeds up training and keeps classes balanced across videos. Default: `0` (unlimited).

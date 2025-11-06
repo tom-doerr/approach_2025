@@ -79,7 +79,7 @@ def pairwise_distance_features(points: np.ndarray) -> np.ndarray:
     return v
 
 
-def extract_features_for_video(path: str, stride: int = 5, max_frames: int = 0) -> np.ndarray:
+def extract_features_for_video(path: str, stride: int = 1, max_frames: int = 0) -> np.ndarray:
     """Extract per‑frame landmark distance features from a video.
 
     - Uses MediaPipe Hands if available; processes every `stride` frame.
