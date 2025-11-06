@@ -1166,7 +1166,7 @@ Tips
   - Workers are not used here; for GPU overlap questions use the DL path. Repro is deterministic given inputs.
 
 ### LogReg C selection (defaults)
-- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set.
+- If you don’t pass `--C`, we still try multiple C values by default via `--hpo-logreg 10` (log‑uniform search). We pick the best C on a validation split and then retrain on the train set. Range: `C ∈ [1e-4, 1e4]`.
 - Disable this by setting `--hpo-logreg 0` to use the literal default `C=1.0`.
 - Filename `_val{ACC}` comes from the final evaluation split you configured; HPO’s internal split does not affect the filename.
 
