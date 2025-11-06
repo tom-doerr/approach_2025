@@ -53,6 +53,10 @@ Scope: Applies to the entire `approach_2025` repo.
 - Doc mismatch to review: we state “shift uses roll‑around (circular) wrap”, but code uses
   reflect padding (`cv.BORDER_REFLECT_101`). Decide whether to keep reflect (current) or switch to true roll.
 
+### 2025-11-03 — Workspace/Git note
+- `approach_2025` may be symlinked inside a larger repo (e.g., `Neural-Computer-Interface/approach_2025@`). Commit/push inside `approach_2025` itself; the outer repo only tracks the symlink entry.
+- Shell aliases (e.g., `ga`) depend on local config; prefer explicit commands: `git add -A && git commit -m "..." && git push`.
+
 ### 2025-11-03 — Hangs followed by high CPU: Why and quick knobs
 - Most common cause: I/O wait during first-epoch cache builds and memmap reads (tasks in `D` state). UI feels frozen; when I/O finishes, many workers run at once → CPU spikes.
 - Thread oversubscription: OpenCV/BLAS/Torch spawn their own pools; with `workers>0` total runnable threads can exceed cores, amplifying the spike.
@@ -63,6 +67,51 @@ Scope: Applies to the entire `approach_2025` repo.
   - Cap threads: pass `--cap-threads` (sets OMP/MKL/OPENBLAS/NUMEXPR=1, cv2/torch threads=1).
   - Reduce CPU aug: try `--rot-deg 5 --warp 0.10` (or keep defaults and enable `--dynamic-aug`).
   - If load persists: lower `--img-size` and keep `--prefetch 1`.
+  - Use RAM for frame caches: set `VKB_FRAMES_DIR=/dev/shm/vkb_frames` (or another tmpfs) so `.npy` memmaps live on tmpfs → no disk `D`-state during reads. Test added `tests/test_frames_env_dir.py`.
+
+### 2025-11-03 — Why I/O reads freeze the GUI
+- Memmapped frame reads cause page faults served by the block layer. With many workers and random access, we saturate IOPS and queue depth → lots of tasks in `D` (uninterruptible I/O). GUI input/desktop apps also page‑fault and wait on the same device, so cursor/Windows stutter.
+- When memory is tight, reclaim (kswapd) runs aggressively; GUI pages get evicted and then fault back in → long stalls.
+- After the I/O completes, many runnable threads wake up together (OpenCV/BLAS/Torch pools × workers) → short CPU spikes while they “catch up”.
+
+Mitigations (runtime)
+- Put frames on tmpfs: `export VKB_FRAMES_DIR=/dev/shm/vkb_frames` (avoid disk entirely).
+- Lower I/O priority: launch with `ionice -c3` (idle) or `ionice -c2 -n7` (best‑effort, lowest) plus our existing `--nice 10`.
+- Keep workers small (0–2) and `--prefetch 1`; warm caches single‑process first.
+- Cap thread pools with `--cap-threads` to reduce the post‑I/O CPU surge.
+
+### 2025-11-03 — Can we make them interruptible?
+- Strictly, no: Linux tasks in uninterruptible I/O (`D` state) cannot be interrupted by signals. The only practical fixes are to avoid hitting disk (tmpfs) or to prefetch so pages are resident.
+- Practical sidesteps we support now:
+  - Use `VKB_FRAMES_DIR` (tmpfs) so memmaps are RAM‑backed.
+  - Do a single‑process warmup epoch (`--workers 0`) to prefill the page cache.
+  - Lower I/O priority with `ionice` so GUI wins contention.
+- If desired, we can add a tiny `--ionice idle` flag to apply `ionice -c3` at startup (Linux‑only); not added yet to keep CLI minimal.
+
+### 2025-11-03 — Why reads are “uninterruptible” (kernel note)
+- Memmap/file reads that miss in RAM trigger a major page fault. The fault handler submits block I/O and then waits for the page to be filled.
+- That wait uses `TASK_UNINTERRUPTIBLE` (state `D`) in most filesystem/block paths (e.g., `wait_on_page_bit(PG_locked/PG_writeback)`), so signals (Ctrl‑C, even `SIGKILL`) are only delivered after the I/O finishes.
+- Rationale: maintain filesystem/device consistency and avoid partially‑filled pages; many block drivers can’t safely abort mid‑request.
+- Exceptions exist (some network/NFS paths use killable waits), but generic local‑disk reads are typically uninterruptible.
+
+### 2025-11-03 — ionice/nice quick recipes (Linux)
+- Run new training at idle I/O priority + lower CPU priority:
+  - `ionice -c3 nice -n 10 .venv/bin/python train_frames.py --clf dl [args...]`
+- Or “best‑effort, lowest” I/O priority (class 2, level 7) + nice:
+  - `ionice -c2 -n7 nice -n 10 .venv/bin/python train_frames.py --clf dl [args...]`
+- Adjust a running process (replace PID):
+  - `ionice -c3 -p <PID>` (idle I/O)
+  - `renice +10 -p <PID>` (CPU nice)
+- Verify:
+  - `ionice -p <PID>` → shows `idle` or `best-effort: prio 7`
+  - `ps -o pid,ni,cmd -p <PID>` → shows niceness
+Notes:
+- Our CLI already lowers CPU priority by default (`--nice 10`). Wrapping with `nice -n 10` is equivalent; doing both is harmless.
+
+### 2025-11-03 — CLI tip: `--cap-threads`
+- `--cap-threads` is a boolean flag (no value). Using `--cap-threads 1` causes an argparse error (`unrecognized arguments: 1`).
+- To enable: pass `--cap-threads` by itself. It sets `OMP/MKL/OPENBLAS/NUMEXPR=1`, disables OpenCV OpenCL, and calls `cv2.setNumThreads(1)`, `torch.set_num_threads(1)`, and `torch.set_num_interop_threads(1)` when available.
+- If you need a specific thread count >1, we can add a small `--threads N` later; for now, set env vars before launch (e.g., `OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2 ...`).
 
 ## 2025-11-01 Updates
 - Fixed DL crash “mat1 and mat2 shapes cannot be multiplied (…150528 and 192…)”. Cause: local `timm` stub flattened raw 224×224 frames into 150,528 dims but used a `Linear(192→C)` head. Fix: stub now applies `AdaptiveAvgPool2d((8,8))` before `Flatten`, so input dim is always `8×8×3=192` regardless of image size. Added `tests/test_timm_stub_pooling.py` to assert outputs are shaped `[B, num_classes]` for sizes 224/64/17.
@@ -1101,3 +1150,18 @@ Tips
   - DL: infer_live uses bundle-saved `input_size` and `normalize` (mean/std) and applies `cv.resize → BGR→RGB → /255 → (x-mean)/std`. Train: same after aug; Val/Test: same without aug. Paths: infer (`infer_live.py:_make_preprocess`), train (`vkb/dataset.FrameDataset.__getitem__`).
   - Classic: infer uses the same embedder (`vkb.emb.create_embedder`) as training, with identical resize + RGB + ImageNet normalization.
 - Default change: set `--eval-split` default to `0.01` (1%). Optuna driver updated to the same. Test `tests/test_cli_eval_split_default.py` locks the default.
+
+## 2025-11-06 Updates
+- New training mode: MediaPipe landmarks + Logistic Regression
+  - CLI: `--clf mp_logreg` (minimal; explicit, no hidden fallbacks).
+  - Features: per-frame upper-triangle pairwise distances between the 21 hand landmarks (x,y), L1-normalized per frame.
+  - Implementation: `vkb/landmarks.py` (`pairwise_distance_features`, `extract_features_for_video`). Training path `_train_mediapipe_logreg()` in `train_frames.py` handles discovery, splits, optional HPO for `C`, and artifacts.
+  - Filenames include `val{ACC}` when a validation split is used, consistent with classic/DL.
+  - Flags: `--mp-stride` (default 5), `--mp-max-frames` (default 200).
+- Tests
+  - `tests/test_landmarks_pairwise_features.py` checks 210-dim output and L1 normalization.
+  - `tests/test_mp_logreg_train_smoke.py` monkeypatches the extractor for CI; asserts saved path includes `mp_logreg` and `val`.
+- Notes
+  - When MediaPipe isn’t installed, `mp_logreg` raises clearly; tests stub the extractor instead.
+  - Workers are not used here; for GPU overlap questions use the DL path. Repro is deterministic given inputs.
+
