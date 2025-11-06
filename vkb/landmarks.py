@@ -47,7 +47,8 @@ def _compute_landmarks_for_stride(path: str, stride: int, max_frames: int):
         idx.append(fi)
         lms.append(pts)
         taken += 1
-        if taken >= int(max_frames):
+        lim = int(max_frames)
+        if lim > 0 and taken >= lim:
             break
     cap.release(); hands.close()
     if not lms:
@@ -78,7 +79,7 @@ def pairwise_distance_features(points: np.ndarray) -> np.ndarray:
     return v
 
 
-def extract_features_for_video(path: str, stride: int = 5, max_frames: int = 200) -> np.ndarray:
+def extract_features_for_video(path: str, stride: int = 5, max_frames: int = 0) -> np.ndarray:
     """Extract per‑frame landmark distance features from a video.
 
     - Uses MediaPipe Hands if available; processes every `stride` frame.
@@ -96,8 +97,9 @@ def extract_features_for_video(path: str, stride: int = 5, max_frames: int = 200
             z = np.load(cpath)
             if int(z['src_size']) == int(fp_size) and int(z['src_mtime_ns']) == int(fp_mtime):
                 idx = z['idx']; lms = z['lm']
-                # Return up to max_frames worth of features
-                k = min(len(idx), int(max_frames))
+                # Return up to max_frames worth of features (0/neg = unlimited)
+                lim = int(max_frames)
+                k = len(idx) if lim <= 0 else min(len(idx), lim)
                 if k > 0:
                     feats = [pairwise_distance_features(lms[i]) for i in range(k)]
                     return np.stack(feats, axis=0)

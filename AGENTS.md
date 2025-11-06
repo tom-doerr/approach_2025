@@ -1185,13 +1185,13 @@ Tips
 - Quick guidance: use 3–10 for longer videos; smaller for short clips to keep per-class ≥2 samples under tail splits.
 
 ### mp_max_frames (definition & caveat)
-- `--mp-max-frames K` caps how many frames per video we keep after applying `mp_stride` (e.g., K=200 keeps the first 200 sampled frames). It speeds up training and keeps classes balanced across videos. Default: `200`.
+- `--mp-max-frames K` caps how many frames per video we keep after applying `mp_stride` (e.g., K=200 keeps the first 200 sampled frames). It speeds up training and keeps classes balanced across videos. Default: `0` (unlimited).
 - Recorded in the sidecar (`hparams.mp_max_frames`). Live inference ignores this.
-- Cache caveat: landmark cache files are keyed by stride only. If you cached with a small `mp_max_frames` and later raise it, we still return the cached subset. Delete matching `.cache/vkb/landmarks/*_s<stride>.npz` to rebuild with a larger cap.
+- Cache caveat: landmark cache files are keyed by stride only. If you cached with a small `mp_max_frames` and later raise it, cached data may be a subset. Delete matching `.cache/vkb/landmarks/*_s<stride>.npz` to rebuild with a larger cap.
 
 ### data_small and running on full data
 - `data_small/` is a tiny, repo-contained example dataset (labels: `PgDown`, `PgUp`, `no_input`) used by tests and for quick sanity runs.
-- Full dataset uses `data/` (default). Example runs:
+- Full dataset uses `data/` (default for `--data`). Example runs:
   - mp_logreg (landmarks): `python train_frames.py --clf mp_logreg --data data --eval-split 0.2 --mp-stride 5 --mp-max-frames 200`
   - Classic ridge (embeddings): `python train_frames.py --clf ridge --data data --eval-split 0.2`
 - Tips: start with modest `mp_stride` (5–10) and `mp_max_frames` (100–300). Landmark caches make subsequent runs faster.

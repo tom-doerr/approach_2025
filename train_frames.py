@@ -39,7 +39,7 @@ def parse_args(argv=None):
     p.add_argument("--sharing-strategy", choices=["auto","file_system","file_descriptor"], default="auto", help="DL: torch.multiprocessing sharing strategy")
     # MediaPipe landmarks mode (mp_logreg)
     p.add_argument("--mp-stride", type=int, default=5, help="MP: process every Nth frame per video (default 5)")
-    p.add_argument("--mp-max-frames", type=int, default=200, help="MP: max frames per video to use (default 200)")
+    p.add_argument("--mp-max-frames", type=int, default=0, help="MP: max frames per video after stride (0 = unlimited)")
     # System stability / diagnostics
     p.add_argument("--cap-threads", action="store_true", help="Cap BLAS/OpenCV/Torch threads to 1 to reduce UI freezes")
     p.add_argument("--nice", type=int, default=10, help="Positive niceness to lower CPU priority (Linux only)")
