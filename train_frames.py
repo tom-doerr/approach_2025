@@ -733,7 +733,7 @@ def _train_mediapipe_logreg(args):
     val_acc = None
     trials = []
     if int(getattr(args, 'hpo_logreg', 0) or 0) > 0:
-        C, val_acc, trials = _hpo_logreg(X, y, iters=int(args.hpo_logreg), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter))
+        C, _hpo_val, trials = _hpo_logreg(X, y, iters=int(args.hpo_logreg), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter))
     clf = LogisticRegression(C=float(C), max_iter=int(args.logreg_max_iter), solver='lbfgs')
     # Split train/val/test
     X_fit, y_fit = X, y
