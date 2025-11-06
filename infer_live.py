@@ -111,6 +111,53 @@ def _xgb_fast_predict(clf, feat):
         return None
 
 
+def _xgb_probs(clf, feat):
+    try:
+        import numpy as np
+        # Prefer sklearn API when available
+        if hasattr(clf, 'predict_proba'):
+            p = clf.predict_proba([feat])[0]
+            return np.asarray(p, dtype=float)
+        # Fallback to booster inplace_predict probabilities
+        booster = getattr(clf, 'get_booster', lambda: None)()
+        if booster is None:
+            return None
+        out = booster.inplace_predict(np.asarray(feat, dtype=np.float32).reshape(1, -1))
+        arr = np.asarray(out)
+        if arr.ndim == 0:
+            return None
+        if arr.ndim == 1:
+            if arr.size == 1:
+                p1 = float(arr[0])
+                return np.array([1.0 - p1, p1], dtype=float)
+            return arr.astype(float)
+        return arr.reshape(-1).astype(float)
+    except Exception:
+        return None
+
+
+def _scores_probs_sklearn(clf, feat):
+    import numpy as np
+    raw = None
+    prob = None
+    if hasattr(clf, 'decision_function'):
+        try:
+            raw = clf.decision_function([feat])
+            raw = np.asarray(raw, dtype=float).reshape(-1)
+        except Exception:
+            raw = None
+    if hasattr(clf, 'predict_proba'):
+        try:
+            prob = clf.predict_proba([feat])[0]
+            prob = np.asarray(prob, dtype=float).reshape(-1)
+        except Exception:
+            prob = None
+    # Special case XGB to ensure probabilities exist
+    if prob is None and ('xgboost' in str(type(clf)).lower()):
+        prob = _xgb_probs(clf, feat)
+    return raw, prob
+
+
 def _make_mp_embedder():
     """Return (embed_fn, cleanup) for MediaPipe landmark features.
 
@@ -241,10 +288,18 @@ def main():
                     cons.print(f"[bold red]{e}[/]")
                     break
                 clf_t0 = perf_counter()
-                pred_idx = _xgb_fast_predict(clf, feat)
-                if pred_idx is None:
-                    pred = clf.predict([feat])[0]
-                    pred_idx = int(pred) if not hasattr(pred, 'item') else int(pred.item())
+                # Compute prediction and gather raw/prob vectors when available
+                raw, prob = _scores_probs_sklearn(clf, feat)
+                if prob is not None:
+                    import numpy as _np
+                    pred_idx = int(_np.argmax(prob))
+                else:
+                    pi = _xgb_fast_predict(clf, feat)
+                    if pi is None:
+                        pred = clf.predict([feat])[0]
+                        pred_idx = int(pred) if not hasattr(pred, 'item') else int(pred.item())
+                    else:
+                        pred_idx = int(pi)
                 clf_ms = (perf_counter() - clf_t0) * 1000.0
         else:
             # DL path
@@ -275,6 +330,28 @@ def main():
         cv.putText(frame, str(lab), (12, 28), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv.LINE_AA)
         cv.putText(frame, f"FPS: {fps:.1f}", (12, 56), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2, cv.LINE_AA)
         cv.putText(frame, f"Proc: {proc_ms:.1f} ms  Emb: {emb_ms:.1f} ms  Clf: {clf_ms:.1f} ms", (12, 82), cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 255), 2, cv.LINE_AA)
+        # Show per-class raw and probability vectors when available
+        try:
+            y0 = 108
+            if clf is not None:
+                # raw/prob from sklearn path
+                if 'raw' in locals() and raw is not None:
+                    txt = "raw=[" + " ".join(f"{float(v):.2f}" for v in raw.tolist()) + "]"
+                    cv.putText(frame, txt, (12, y0), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 200, 255), 2, cv.LINE_AA); y0 += 22
+                if 'prob' in locals() and prob is not None:
+                    txt = "prob=[" + " ".join(f"{float(p):.2f}" for p in prob.tolist()) + "]"
+                    cv.putText(frame, txt, (12, y0), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 255, 180), 2, cv.LINE_AA); y0 += 22
+            else:
+                # DL path: show logits and softmax
+                import torch
+                p = torch.softmax(logits, dim=1).squeeze(0).tolist()
+                r = logits.squeeze(0).tolist()
+                txt = "raw=[" + " ".join(f"{float(v):.2f}" for v in r) + "]"
+                cv.putText(frame, txt, (12, 108), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 200, 255), 2, cv.LINE_AA)
+                txt = "prob=[" + " ".join(f"{float(q):.2f}" for q in p) + "]"
+                cv.putText(frame, txt, (12, 130), cv.FONT_HERSHEY_SIMPLEX, 0.6, (180, 255, 180), 2, cv.LINE_AA)
+        except Exception:
+            pass
         cv.imshow(title, frame)
         k = cv.waitKey(1) & 0xFF
         if k in (27, ord('q')):
