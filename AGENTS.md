@@ -299,6 +299,26 @@ Consider adopting (small, high‑leverage):
 - If the user types exactly `blueberries`, respond with it reversed: `seirrebeulb`.
 
 ## Change Log
+### 2025-11-06 — mp_xgb HPO (latency + accuracy)
+- Added a tiny HPO runner `hpo_mp_xgb.py` that does random search for the MediaPipe‑distance XGBoost path and reports both validation accuracy and inference throughput (samples/s). Keeps code minimal; no fallbacks. Test: `tests/test_hpo_mp_xgb_script.py`.
+- Quick study (local): data=`data`, eval_split=0.20 (tail‑per‑video), mp_stride=5, trials=10. Features: 15,741 frames across 3 classes.
+  - Best observed acc ≈ 0.908; fastest among near‑best (≥0.906) reached ~106k samples/s.
+  - Pareto highlights (acc, sps, params):
+    - 0.906 acc, 106k sps: depth=8, est=829, lr≈0.493, sub≈0.99, col≈0.84, λ≈0.80.
+    - 0.907 acc, 82k sps: depth=9, est=433, lr≈0.214, sub≈0.77, col≈0.65, λ≈0.03.
+    - 0.907 acc, 70k sps: depth=5, est=689, lr≈0.021, sub≈0.94, col≈0.97, λ≈0.014.
+  - Correlation (directional, Spearman over trials):
+    - max_depth: +acc (strong), −throughput (moderate). Sweet spot ≈ 8–9.
+    - n_estimators: ~0 on acc (here), −throughput (strong). Keep ≈ 400–900.
+    - learning_rate: +acc (moderate/strong). Higher lr pairs well with more trees/depth.
+    - subsample: slight −acc, +throughput. Prefer 0.8–1.0.
+    - colsample_bytree: +acc (moderate), +throughput (mild). Prefer ≥0.8.
+    - reg_lambda: −acc (moderate on this data). Stay ~0.01–1.0.
+- Recommendation (balanced): start with `max_depth=8–9, n_estimators~600, lr~0.1–0.3, subsample~0.9, colsample_bytree~0.9, reg_lambda~0.1`. Adjust `n_estimators` for speed/acc tradeoff.
+- How to run:
+  - `python hpo_mp_xgb.py --data data --eval-split 0.2 --eval-mode tail-per-video --trials 20 --mp-stride 1` (use `OMP_NUM_THREADS=4` to keep desktop responsive).
+  - Results print a short top list plus a JSON blob (`RESULTS_JSON:`) you can save and analyze.
+
 ### 2025-11-03 — Freeze investigation and minimal mitigations
 - Observed sources of desktop “freezes” during training (single‑GPU desktops):
   - Thread oversubscription: DataLoader workers + multi‑threaded BLAS/OpenCV → far more runnable threads than cores; spikes load and latency.
@@ -1202,6 +1222,11 @@ Tips
     - DL: backbone, input size, and optional `dropout`/`drop_path` if present.
     - Test: `tests/test_infer_live_params_print.py` asserts presence of the param line for a LogReg bundle.
   - Probabilities with names: we now print a second line `prob_names=label=prob ...` mapping each class name to its probability alongside the vector form. Test: `tests/test_infer_live_prob_names.py`.
+
+### DL Normalization (mean/std)
+- DL image preprocessing uses per-channel normalization after scaling to [0,1]: `(x - mean)/std` with RGB ordering.
+- Defaults are ImageNet: `mean=[0.485, 0.456, 0.406]`, `std=[0.229, 0.224, 0.225]`.
+- We save these in the DL bundle under `normalize` and infer_live reads them; if missing, it falls back to the ImageNet defaults. Values print in the model sidecar and can be surfaced in infer_live if desired.
 
 - ### mp_stride (definition & guidance)
 - `--mp-stride N` processes every Nth frame when extracting MediaPipe landmarks for training (e.g., N=5 → frames 0,5,10,…). It reduces compute and near-duplicate samples. Default: `1` (no stride, process every frame).

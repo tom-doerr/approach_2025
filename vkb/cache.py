@@ -35,6 +35,15 @@ def load_embeddings(path: str):
 
 # --- Frame cache (for video random access) ---
 def frames_root() -> str:
+    """Base directory for frame caches.
+
+    If env `VKB_FRAMES_DIR` is set, use it (e.g., a tmpfs/ramdisk) to avoid
+    disk I/O stalls; otherwise default to `.cache/vkb/frames`.
+    """
+    d = os.getenv("VKB_FRAMES_DIR")
+    if d:
+        os.makedirs(d, exist_ok=True)
+        return d
     d = os.path.join(cache_root(), "frames")
     os.makedirs(d, exist_ok=True)
     return d
