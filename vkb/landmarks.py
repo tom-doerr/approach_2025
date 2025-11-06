@@ -17,7 +17,7 @@ def _cache_path(video_path: str, stride: int) -> str:
     return os.path.join(d, f"{_key_for(video_path)}_s{int(stride)}.npz")
 
 
-def _compute_landmarks_for_stride(path: str, stride: int, max_frames: int):
+def _compute_landmarks_for_stride(path: str, stride: int, max_frames: int, start_from: int = 0):
     import cv2
     try:
         import mediapipe as mp
@@ -36,6 +36,8 @@ def _compute_landmarks_for_stride(path: str, stride: int, max_frames: int):
         if not ok:
             break
         fi += 1
+        if fi < int(start_from):
+            continue
         if fi % max(1, int(stride)) != 0:
             continue
         rgb = frame[:, :, ::-1]
@@ -97,8 +99,19 @@ def extract_features_for_video(path: str, stride: int = 1, max_frames: int = 0) 
             z = np.load(cpath)
             if int(z['src_size']) == int(fp_size) and int(z['src_mtime_ns']) == int(fp_mtime):
                 idx = z['idx']; lms = z['lm']
-                # Return up to max_frames worth of features (0/neg = unlimited)
                 lim = int(max_frames)
+                need_more = (lim <= 0) or (len(idx) < lim)
+                if need_more:
+                    start_from = int(idx[-1]) + 1 if len(idx) > 0 else 0
+                    need = 0 if lim <= 0 else max(0, lim - len(idx))
+                    add_idx, add_lms = _compute_landmarks_for_stride(path, stride=int(stride), max_frames=int(need), start_from=start_from)
+                    if len(add_idx) > 0:
+                        idx = np.concatenate([idx, add_idx])
+                        lms = np.concatenate([lms, add_lms], axis=0)
+                        try:
+                            np.savez_compressed(cpath, idx=idx, lm=lms, src_size=int(fp_size or -1), src_mtime_ns=int(fp_mtime or -1))
+                        except Exception:
+                            pass
                 k = len(idx) if lim <= 0 else min(len(idx), lim)
                 if k > 0:
                     feats = [pairwise_distance_features(lms[i]) for i in range(k)]
@@ -106,7 +119,7 @@ def extract_features_for_video(path: str, stride: int = 1, max_frames: int = 0) 
         except Exception:
             pass
     # Compute and cache
-    idx, lms = _compute_landmarks_for_stride(path, stride=int(stride), max_frames=int(max_frames))
+    idx, lms = _compute_landmarks_for_stride(path, stride=int(stride), max_frames=int(max_frames), start_from=0)
     if len(idx) > 0:
         try:
             sz = -1 if fp_size is None else int(fp_size)

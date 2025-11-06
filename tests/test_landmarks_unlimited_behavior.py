@@ -9,7 +9,7 @@ def test_extract_features_unlimited_when_zero(monkeypatch):
         vid = os.path.join(tmp, 'x.mp4')
         open(vid, 'wb').close()
 
-        def fake_compute(path, stride, max_frames):
+        def fake_compute(path, stride, max_frames, start_from=0):
             assert max_frames == 0  # pass-through of zero
             idx = np.arange(10, dtype=int)
             pts = np.zeros((10, 21, 3), dtype=float)
@@ -23,4 +23,3 @@ def test_extract_features_unlimited_when_zero(monkeypatch):
         assert feats.shape[0] == 10
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-

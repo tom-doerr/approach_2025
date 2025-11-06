@@ -11,7 +11,7 @@ def test_landmarks_cache_skips_compute_on_second_call(monkeypatch):
 
         calls = {'n': 0}
 
-        def fake_compute(path, stride, max_frames):
+        def fake_compute(path, stride, max_frames, start_from=0):
             calls['n'] += 1
             idx = np.arange(0, 10, 2, dtype=int)
             lm_arr = np.zeros((len(idx), 21, 3), dtype=float)
@@ -34,4 +34,3 @@ def test_landmarks_cache_skips_compute_on_second_call(monkeypatch):
         assert f2.shape == f1.shape
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
