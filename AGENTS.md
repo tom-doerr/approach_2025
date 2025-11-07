@@ -1253,10 +1253,10 @@ Tips
   - CLI: `--clf mp_xgb` trains an `XGBClassifier` on the same 210‑D L1‑normalized pairwise distances used by `mp_logreg`.
   - Supports `--hpo-xgb` (random search) and tail/tail-per-video splits. Filenames include `val{ACC}` when a validation split is used.
   - Tests: `tests/test_mp_xgb_train_smoke.py` (smoke; stubs feature extractor, asserts saved path contains `mp_xgb` and `val`).
-  - HPO auto-extend: if best XGB params are near the edge of the search bounds, we expand the bounds (depth, n_estimators, lr, subsample, colsample, reg_lambda) and run a short top-up search. Helpers: `_xgb_default_bounds()`, `_needs_expand_xgb()`.
+  - HPO auto-extend: REMOVED on 2025-11-07 (we keep fixed bounds to stay minimal). `_needs_expand_xgb()` remains only for tests that detect edge proximity; it is not used to expand.
 
-### HPO Auto-Extend (LogReg + XGB)
-- Logistic Regression (`mp_logreg`): if the best `C` is near the boundary of the default range (`1e-4..1e8`), we expand the exponent range by ±2 and run a smaller second search, keeping the better of the two. Helper: `_needs_expand_logreg()`.
-- XGBoost (`mp_xgb`): after the first search with defaults, if the best params lie within ~10% of any bound, we widen bounds and re-run a smaller search. We keep the improved result if any. The behavior is documented and unit-tested (`tests/test_hpo_expand_detection.py`).
+### HPO Auto-Extend (removed)
+- 2025-11-07: Bound-expansion for both LogReg and XGB was removed per request. We now search fixed ranges only (LogReg C: 1e-4..1e8; XGB: see `_xgb_default_bounds()`). `_needs_expand_logreg()` and `_needs_expand_xgb()` are kept for unit tests and may be deleted later.
 ## 2025-11-07 Updates
 - mp_xgb HPO CLI now prints per-trial params with the val score (same formatting as classic xgb). Test: `tests/test_mp_xgb_hpo_params_print.py`.
+- Removed HPO bound auto-expansion for mp_logreg and mp_xgb (fixed ranges only).
