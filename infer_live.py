@@ -310,6 +310,7 @@ def main():
     emb_ms = 0.0  # preprocess or embed time
     proc_ms = 0.0
     clf_ms = 0.0  # classifier or model time
+    emb_label = 'Emb'; clf_label = 'Clf'
     frames_left = int(args.frames)
     while True:
         frame_t0 = perf_counter()
@@ -369,6 +370,25 @@ def main():
             inst = 1.0/dt
             fps = inst if fps == 0.0 else (0.9*fps + 0.1*inst)
         # overlay
+        # Decide labels for timing overlay (make MP/XGB explicit when applicable)
+        try:
+            if clf is not None:
+                if 'mp_mode' in locals() and mp_mode:
+                    emb_label = 'MP'
+                else:
+                    emb_label = 'Emb'
+                tname = str(type(clf)).lower()
+                if 'xgb' in tname or 'xgboost' in tname:
+                    clf_label = 'XGB'
+                elif 'logistic' in tname:
+                    clf_label = 'LogReg'
+                else:
+                    clf_label = 'Clf'
+            else:
+                emb_label = 'Pre'; clf_label = 'DL'
+        except Exception:
+            emb_label = 'Emb'; clf_label = 'Clf'
+
         if 'lm_pts' in locals() and lm_pts:
             try:
                 for (x, y) in lm_pts:
@@ -377,7 +397,7 @@ def main():
                 pass
         cv.putText(frame, str(lab), (12, 28), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2, cv.LINE_AA)
         cv.putText(frame, f"FPS: {fps:.1f}", (12, 56), cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2, cv.LINE_AA)
-        cv.putText(frame, f"Proc: {proc_ms:.1f} ms  Emb: {emb_ms:.1f} ms  Clf: {clf_ms:.1f} ms", (12, 82), cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 255), 2, cv.LINE_AA)
+        cv.putText(frame, f"Proc: {proc_ms:.1f} ms  {emb_label}: {emb_ms:.1f} ms  {clf_label}: {clf_ms:.1f} ms", (12, 82), cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 255), 2, cv.LINE_AA)
         # Show per-class raw and probability vectors when available
         try:
             y0 = 108
