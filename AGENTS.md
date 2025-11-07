@@ -1260,3 +1260,4 @@ Tips
 ## 2025-11-07 Updates
 - mp_xgb HPO CLI now prints per-trial params with the val score (same formatting as classic xgb). Test: `tests/test_mp_xgb_hpo_params_print.py`.
 - Removed HPO bound auto-expansion for mp_logreg and mp_xgb (fixed ranges only).
+- Reduced XGBoost tree depth: mp_xgb now caps `max_depth` at 3 everywhere (HPO bounds and default non-HPO settings). Rationale: simpler trees, lower latency; aligns with current focus on accuracy at modest speed (≥60 sps is already exceeded by wide margin).
