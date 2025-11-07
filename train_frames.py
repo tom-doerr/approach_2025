@@ -267,7 +267,7 @@ def _hpo_xgb(X, y, iters: int, seed: int = 0, logger=None, idx_by_class=None, ev
 
 def _xgb_default_bounds():
     return {
-        'depth_min': 2, 'depth_max': 6,
+        'depth_min': 2, 'depth_max': 3,
         'n_estimators_min': 50, 'n_estimators_max': 1000,
         'lr_exp_min': -2.0, 'lr_exp_max': -0.5,
         'subsample_min': 0.7, 'subsample_max': 1.0,
@@ -921,7 +921,7 @@ def _train_mediapipe_xgb(args):
         if va_idx:
             Xva = list(Xarr[va_idx]); yva = list(yarr[va_idx])
             Xtr = list(Xarr[tr_idx]); ytr = list(yarr[tr_idx])
-            clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
+            clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':3,'tree_method':'hist','n_jobs':0}))
             clf.fit(Xtr, ytr)
             val_acc = float(clf.score(Xva, yva))
             trained_on_val = True
@@ -929,7 +929,7 @@ def _train_mediapipe_xgb(args):
             X_test = list(Xarr[te_idx]); y_test = list(yarr[te_idx])
         X_fit, y_fit = list(Xarr[tr_idx] if tr_idx else Xarr), list(yarr[tr_idx] if tr_idx else yarr)
     if clf is None:
-        clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':5,'tree_method':'hist','n_jobs':0}))
+        clf = xgb.XGBClassifier(**(params or {'n_estimators':200,'max_depth':3,'tree_method':'hist','n_jobs':0}))
     # Avoid long refit when we already trained on the train split for val
     if not trained_on_val:
         cons.print(f"[dim]Training mp_xgb...[/]")

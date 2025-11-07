@@ -81,7 +81,7 @@ class Trial:
 def _sample_params(rng) -> Dict[str, Any]:
     import numpy as np
     return {
-        'max_depth': int(rng.integers(4, 13)),
+        'max_depth': int(rng.integers(2, 4)),  # 2..3 inclusive
         'n_estimators': int(rng.integers(400, 4001)),
         'learning_rate': float(10 ** rng.uniform(-2.3, -0.5)),  # ~0.005..0.3
         'subsample': float(rng.uniform(0.5, 1.0)),
