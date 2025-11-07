@@ -843,6 +843,12 @@ def _train_mediapipe_logreg(args):
         "frames": len(y),
         "hparams": {"C": float(C), "mp_stride": int(getattr(args,'mp_stride',5)), "mp_max_frames": int(getattr(args,'mp_max_frames',200)), "feat_norm": "l1", "pairs": "upper_xy", "landmarks": 21},
     })
+    try:
+        cons.print(f"Saved model: {path}")
+        v = (val_acc if val_acc is not None else float('nan'))
+        cons.print(f"Final: val_acc={v:.3f} params=C={float(C):.5f}, mp_stride={int(getattr(args,'mp_stride',1))}, mp_max_frames={int(getattr(args,'mp_max_frames',0))}")
+    except Exception:
+        pass
     # Print tiny HPO table if we ran it
     if trials:
         from rich.table import Table
@@ -955,8 +961,15 @@ def _train_mediapipe_xgb(args):
         "val_acc": val_acc,
         "test_acc": test_acc,
         "frames": len(y),
-        "hparams": {"xgb_params": params or {"n_estimators":200,"max_depth":5}},
+        "hparams": {"xgb_params": params or {"n_estimators":200,"max_depth":3}},
     })
+    try:
+        cons.print(f"Saved model: {path}")
+        p = params or clf.get_params()
+        v = (val_acc if val_acc is not None else float('nan'))
+        cons.print(f"Final: val_acc={v:.3f} params={_fmt_xgb_params(p)}")
+    except Exception:
+        pass
     return path
 
 def train(args):
