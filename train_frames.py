@@ -897,7 +897,17 @@ def _train_mediapipe_xgb(args):
     if int(getattr(args, 'hpo_xgb', 0) or 0) > 0:
         frac = _va if (0.0 < _va < 0.9) else 0.2
         bnds = _xgb_default_bounds()
-        best_p, best_s, trials = _hpo_xgb(X, y, iters=int(args.hpo_xgb), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial {i}: val_acc={s:.3f}[/]"), **bnds)
+        best_p, best_s, trials = _hpo_xgb(
+            X,
+            y,
+            iters=int(args.hpo_xgb),
+            idx_by_class=idx_by_class,
+            eval_frac=frac,
+            logger=lambda i, p, s: cons.print(
+                f"[dim]  trial {i}: val_acc={s:.3f} params={_fmt_xgb_params(p)}[/]"
+            ),
+            **bnds,
+        )
         # If best lies near a boundary, expand and re-run a smaller top-up search
         if _needs_expand_xgb(best_p, bnds):
             cons.print("[dim]HPO-XGB: best near bound; expanding search and running again[/]")

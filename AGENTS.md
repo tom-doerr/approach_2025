@@ -319,6 +319,10 @@ Consider adopting (small, high‑leverage):
   - `python hpo_mp_xgb.py --data data --eval-split 0.2 --eval-mode tail-per-video --trials 20 --mp-stride 1` (use `OMP_NUM_THREADS=4` to keep desktop responsive).
   - Results print a short top list plus a JSON blob (`RESULTS_JSON:`) you can save and analyze.
 
+#### Accuracy‑first addendum (stride=1, early stopping)
+- Runner now supports `--min-sps` (prefer configs with ≥ this samples/s) and tries early stopping; falls back cleanly if unsupported.
+- Quick high‑accuracy pass (6 trials, stride=1, early_rounds=100): best acc ≈ 0.908 (similar to stride=5 run). To push higher we likely need better features or more trials.
+
 ### 2025-11-03 — Freeze investigation and minimal mitigations
 - Observed sources of desktop “freezes” during training (single‑GPU desktops):
   - Thread oversubscription: DataLoader workers + multi‑threaded BLAS/OpenCV → far more runnable threads than cores; spikes load and latency.
