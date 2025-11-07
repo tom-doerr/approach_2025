@@ -1262,3 +1262,4 @@ Tips
 - Removed HPO bound auto-expansion for mp_logreg and mp_xgb (fixed ranges only).
 - Reduced XGBoost tree depth: mp_xgb now caps `max_depth` at 3 everywhere (HPO bounds and default non-HPO settings). Rationale: simpler trees, lower latency; aligns with current focus on accuracy at modest speed (≥60 sps is already exceeded by wide margin).
 - mp training UX: when saving mp_logreg or mp_xgb, we now print a concise line with the final `val_acc` and params used (plus the usual `Saved model: <path>`). Tests: `tests/test_mp_final_prints.py`.
+- infer_live timing labels: the per-frame overlay now shows explicit components — `MP:` for MediaPipe landmark time, and `XGB:` (or `LogReg:`) for classifier time. Test: `tests/test_infer_live_mp_timing_labels.py` captures `cv2.putText` calls and asserts labels.
