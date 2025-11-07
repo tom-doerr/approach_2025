@@ -787,16 +787,16 @@ def _train_mediapipe_logreg(args):
     val_acc = None
     trials = []
     if int(getattr(args, 'hpo_logreg', 0) or 0) > 0:
-        # initial range 1e-4..1e8
+        # fixed range 1e-4..1e8 (no bound expansion)
         cmin, cmax = -4.0, 8.0
-        C, _hpo_val, trials = _hpo_logreg(X, y, iters=int(args.hpo_logreg), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter), c_exp_min=cmin, c_exp_max=cmax)
-        # Expand if near bounds
-        if _needs_expand_logreg(C, cmin, cmax):
-            cons.print("[dim]HPO-LogReg: best C near bound; expanding search and running again[/]")
-            cmin2, cmax2 = cmin - 2.0, cmax + 2.0
-            C2, _hpo_val2, trials2 = _hpo_logreg(X, y, iters=max(3, int(args.hpo_logreg)//2), idx_by_class=idx_by_class, eval_frac=float(args.eval_split), max_iter=int(args.logreg_max_iter), c_exp_min=cmin2, c_exp_max=cmax2)
-            if (_hpo_val2 or -1) > (_hpo_val or -1):
-                C, _hpo_val, trials = C2, _hpo_val2, trials + trials2
+        C, _hpo_val, trials = _hpo_logreg(
+            X, y,
+            iters=int(args.hpo_logreg),
+            idx_by_class=idx_by_class,
+            eval_frac=float(args.eval_split),
+            max_iter=int(args.logreg_max_iter),
+            c_exp_min=cmin, c_exp_max=cmax,
+        )
     clf = LogisticRegression(C=float(C), max_iter=int(args.logreg_max_iter), solver='lbfgs')
     # Split train/val/test
     X_fit, y_fit = X, y
@@ -908,22 +908,7 @@ def _train_mediapipe_xgb(args):
             ),
             **bnds,
         )
-        # If best lies near a boundary, expand and re-run a smaller top-up search
-        if _needs_expand_xgb(best_p, bnds):
-            cons.print("[dim]HPO-XGB: best near bound; expanding search and running again[/]")
-            # Expand bounds moderately
-            bnds2 = dict(bnds)
-            bnds2['depth_max'] = max(bnds['depth_max']*2, bnds['depth_max']+4)
-            bnds2['n_estimators_max'] = max(bnds['n_estimators_max']*2, 1500)
-            bnds2['lr_exp_min'] = min(bnds['lr_exp_min']-1.0, -4.0)
-            bnds2['lr_exp_max'] = max(bnds['lr_exp_max']+0.5, 0.0)
-            bnds2['subsample_min'] = min(0.5, bnds['subsample_min'])
-            bnds2['colsample_min'] = min(0.5, bnds['colsample_min'])
-            bnds2['reg_lambda_exp_min'] = min(bnds['reg_lambda_exp_min']-1.0, -4.0)
-            bnds2['reg_lambda_exp_max'] = max(bnds['reg_lambda_exp_max']+1.0, 3.0)
-            best_p2, best_s2, trials2 = _hpo_xgb(X, y, iters=max(3, int(args.hpo_xgb)//2), idx_by_class=idx_by_class, eval_frac=frac, logger=lambda i,p,s: cons.print(f"[dim]  trial+ {i}: val_acc={s:.3f}[/]"), **bnds2)
-            if best_s2 > best_s:
-                best_p, best_s, trials = best_p2, best_s2, trials + trials2
+        # No auto-expansion of bounds; keep search within defaults
         params = best_p
     trained_on_val = False
     if _te > 0.0 or _va > 0.0:
